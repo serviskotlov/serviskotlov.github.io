@@ -110,6 +110,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .fta{min-height:70px;resize:vertical;}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.f3.two{grid-template-columns:1fr 1fr;}
+.chkline{display:flex;align-items:center;gap:10px;background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px;font-size:14px;cursor:pointer;}
+.chkline input{width:20px;height:20px;accent-color:var(--accent3);flex-shrink:0;}
+.stamp-prev{width:120px;height:70px;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;
+  background-color:#fff;background-image:linear-gradient(45deg,#e6e9ee 25%,transparent 25%),linear-gradient(-45deg,#e6e9ee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e6e9ee 75%),linear-gradient(-45deg,transparent 75%,#e6e9ee 75%);
+  background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;}
+#pdfBusy{position:fixed;inset:0;z-index:99999;background:var(--bg);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;font-family:var(--mono);color:var(--text);}
 
 /* ── BUTTONS ── */
 .btn{width:100%;padding:12px;border:none;border-radius:10px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:4px;}
@@ -276,6 +283,9 @@ select option{background:#132233;}
 #printArea .sp .sign{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin-top:3mm;}
 #printArea .sp .sign .s{text-align:center;}
 #printArea .sp .sign .line{border-top:.8px solid #8a929c;margin-top:12mm;padding-top:1.2mm;font-size:8pt;color:#5b6470;}
+#printArea .sp .sign .s{position:relative;}
+#printArea .sp .sign .stamp{position:absolute;left:50%;top:0;transform:translateX(-50%);max-height:23mm;max-width:46mm;object-fit:contain;}
+#printArea .sp .sign.has-stamp .line{margin-top:21mm;}
 #printArea .sp .sign .who{font-size:8.4pt;margin-top:.8mm;}
 #printArea .sp .foot{margin-top:5mm;border-top:.6px solid #c8ced6;padding-top:1.5mm;font-size:7pt;color:#5b6470;display:flex;justify-content:space-between;gap:4mm;break-inside:avoid;}
 #printArea .sp-page{width:210mm;min-height:296mm;padding:12mm 11mm;box-sizing:border-box;page-break-after:always;break-after:page;}
@@ -393,10 +403,11 @@ input[type="file"]{display:none;}
   <div class="stitle">🏢 Firma (hlavička protokolu)</div>
   <div class="fg"><label class="fl">Názov firmy</label><input class="fi" id="sFirma" placeholder="Názov vašej firmy"></div>
   <div class="fg"><label class="fl">Adresa</label><input class="fi" id="sAddr" placeholder="Ulica 1, 000 00 Mesto"></div>
-  <div class="f3">
+  <label class="chkline"><input type="checkbox" id="sVatPayer" onchange="toggleVatFields()"> Firma je platiteľom DPH</label>
+  <div class="f3" id="sTaxRow">
     <div class="fg"><label class="fl">IČO</label><input class="fi" id="sIco"></div>
     <div class="fg"><label class="fl">DIČ</label><input class="fi" id="sDic"></div>
-    <div class="fg"><label class="fl">IČ DPH</label><input class="fi" id="sIcdph"></div>
+    <div class="fg" id="sIcdphWrap"><label class="fl">IČ DPH</label><input class="fi" id="sIcdph"></div>
   </div>
   <div class="frow">
     <div class="fg"><label class="fl">Web</label><input class="fi" id="sWeb" placeholder="www.firma.sk"></div>
@@ -413,6 +424,15 @@ input[type="file"]{display:none;}
       <button class="btn btn-d" style="margin:0;width:44px" onclick="clearLogo()">✕</button>
     </div>
     <input type="file" id="logoFile" accept="image/*" onchange="uploadLogo(event)">
+  </div>
+  <div class="fg"><label class="fl">Pečiatka (do servisného protokolu)</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div id="stampPrev" class="stamp-prev"></div>
+      <button class="btn btn-s" style="margin:0;flex:1" onclick="document.getElementById('stampFile').click()">📁 Vybrať pečiatku</button>
+      <button class="btn btn-d" style="margin:0;width:44px" onclick="clearStamp()">✕</button>
+    </div>
+    <input type="file" id="stampFile" accept="image/*" style="display:none" onchange="uploadStamp(event)">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Odfoť alebo naskenuj pečiatku na bielom papieri. Biele pozadie sa odstráni automaticky (v náhľade je za pečiatkou šachovnica).</div>
   </div>
   <div class="stitle">🔔 Upozornenia</div>
   <div class="fg"><label class="fl">Interval prehliadky (mesiace)</label>
@@ -537,6 +557,7 @@ input[type="file"]{display:none;}
       <div class="fg"><label class="fl">Telefón</label><input class="fi" id="fPhone" type="tel" placeholder="+421..."></div>
       <div class="fg"><label class="fl">Obec</label><input class="fi" id="fCity" placeholder="Senica"></div>
     </div>
+    <div class="fg"><label class="fl">E-mail</label><input class="fi" id="fEmail" type="email" inputmode="email" autocomplete="off" placeholder="zakaznik@email.sk"></div>
     <div class="frow">
       <div class="fg"><label class="fl">Adresa</label><input class="fi" id="fAddr" placeholder="Ulica 12"></div>
       <div class="fg"><label class="fl">PSČ</label><input class="fi" id="fPsc" type="text" inputmode="numeric" placeholder="90501" maxlength="5"></div>
@@ -689,9 +710,9 @@ input[type="file"]{display:none;}
     <button class="btn btn-s" style="margin-top:6px" onclick="addInvItem()">➕ Pridať položku</button>
     <div class="inv-sum">
       <div>
-        <div class="inv-sum-label">CELKOM BEZ DPH</div>
-        <div class="inv-sum-label" style="margin-top:2px">DPH 20%</div>
-        <div class="inv-sum-label" style="margin-top:2px;color:var(--accent3);font-weight:700">CELKOM S DPH</div>
+        <div class="inv-sum-label" id="invLblBase">CELKOM BEZ DPH</div>
+        <div class="inv-sum-label" style="margin-top:2px" id="invLblVat">DPH 23%</div>
+        <div class="inv-sum-label" style="margin-top:2px;color:var(--accent3);font-weight:700" id="invLblTotal">CELKOM S DPH</div>
       </div>
       <div style="text-align:right">
         <div class="inv-sum-label" id="invBase">0.00 €</div>
@@ -793,6 +814,22 @@ input[type="file"]{display:none;}
   <button class="btn btn-s" style="margin-top:6px" onclick="closePM()">Zavrieť</button>
 </div>
 </div>
+
+<!-- MODAL: E-MAIL PROTOKOLU -->
+<div class="ov-bg" id="mailModal">
+<div class="modal">
+  <div class="mdrag"></div>
+  <div class="mtitle"><span>✉️ Poslať protokol e-mailom</span><button class="mclose" onclick="closeMailModal()">✕</button></div>
+  <div class="fg"><label class="fl">Komu (e-mail zákazníka)</label><input class="fi" id="mTo" type="email" inputmode="email" autocomplete="off" placeholder="zakaznik@email.sk"></div>
+  <div class="fg"><label class="fl">Predmet</label><input class="fi" id="mSubj"></div>
+  <div class="fg"><label class="fl">Text správy</label><textarea class="fta" id="mBody" style="min-height:150px"></textarea></div>
+  <div id="mStatus" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin:4px 0 8px">⏳ Pripravujem PDF…</div>
+  <button class="btn btn-p" id="mShareBtn" disabled onclick="mailShare()">📤 Poslať cez Gmail / Outlook / Mail (PDF v prílohe)</button>
+  <button class="btn btn-s" id="mDlBtn" style="margin-top:6px" disabled onclick="mailDownload()">⬇️ Stiahnuť PDF a otvoriť e-mail</button>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6" id="mHint"></div>
+</div>
+</div>
+<div id="pdfBusy"><div style="font-size:30px">📄</div><div>Pripravujem PDF…</div></div>
 
 <!-- MODAL: LIMIT / LICENCIA -->
 <div class="ov-bg" id="licModal">
@@ -1052,7 +1089,7 @@ const LIC_PUBKEY = {"kty":"EC","crv":"P-256","x":"jHq6jjFBOFnyixwtu2xvyrCd6zp8QS
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
 // Adresa servera pre online aktiváciu (Cloudflare Worker). Prázdne = len offline overenie.
-const LIC_API = 'https://serviskotlov-licencie.gappa1972.workers.dev/';
+const LIC_API = '';
 const LIC_RECHECK_DAYS = 3;   // ako často sa licencia overí online (keď je internet)
 const LIC_GRACE_DAYS   = 30;  // koľko dní funguje licencia bez overenia (bez signálu)
 
@@ -1543,7 +1580,7 @@ function openAdd(){
   editId=null;
   document.getElementById('custModalTitle').textContent='Nový zákazník';
   document.getElementById('delBtn').style.display='none';
-  ['fName','fPhone','fCity','fAddr','fPsc','fModel','fNotes','fYear','fPower','fSerial'].forEach(id=>document.getElementById(id).value='');
+  ['fName','fPhone','fEmail','fCity','fAddr','fPsc','fModel','fNotes','fYear','fPower','fSerial'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fBrand').value=''; document.getElementById('fType').value='';
   document.getElementById('fLat').value=''; document.getElementById('fLng').value='';
   document.getElementById('fLast').value='';
@@ -1563,6 +1600,7 @@ function openEdit(id){
   document.getElementById('delBtn').style.display='block';
   document.getElementById('fName').value=c.name||'';
   document.getElementById('fPhone').value=c.phone||'';
+  document.getElementById('fEmail').value=c.email||'';
   document.getElementById('fCity').value=c.city||'';
   document.getElementById('fAddr').value=c.addr||'';
   document.getElementById('fPsc').value=c.psc||'';
@@ -1594,6 +1632,7 @@ async function saveCust(){
   const c={
     id:editId||uid(), name,
     phone:document.getElementById('fPhone').value.trim(),
+    email:document.getElementById('fEmail').value.trim(),
     city:document.getElementById('fCity').value.trim(),
     addr:document.getElementById('fAddr').value.trim(),
     psc:document.getElementById('fPsc').value.trim(),
@@ -1908,9 +1947,13 @@ function renderInvItems(){
 }
 function calcInv(){
   const base=invItems.reduce((s,i)=>(s+(i.qty||1)*(i.price||0)),0);
-  const vat=base*0.2;
-  document.getElementById('invBase').textContent=base.toFixed(2)+' €';
-  document.getElementById('invVat').textContent=vat.toFixed(2)+' €';
+  const payer=isVatPayer();
+  const vat=payer?round2(base*VAT_RATE):0;
+  document.getElementById('invLblBase').textContent=payer?'CELKOM BEZ DPH':'Nie som platiteľ DPH';
+  document.getElementById('invLblVat').textContent=payer?'DPH '+Math.round(VAT_RATE*100)+'%':'';
+  document.getElementById('invLblTotal').textContent=payer?'CELKOM S DPH':'CELKOM K ÚHRADE';
+  document.getElementById('invBase').textContent=payer?base.toFixed(2)+' €':'';
+  document.getElementById('invVat').textContent=payer?vat.toFixed(2)+' €':'';
   document.getElementById('invTotal').textContent=(base+vat).toFixed(2)+' €';
   // refresh totals in item column
   document.querySelectorAll('.inv-total').forEach((el,i)=>{
@@ -2123,6 +2166,7 @@ function renderProtoList(){
         <div class="pi-s">${fmt(p.date)} · ${esc((ZAVER_TXT[p.zaver]||'').split('–')[0].trim())}</div>
       </div>
       <button onclick="printProtocolById('${p.id}')">🖨️</button>
+      <button onclick="openProtoEmail('${p.id}')" title="Poslať e-mailom">✉️</button>
       <button onclick="openProtocol('${p.id}')">✏️</button>
       <button onclick="delProtocol('${p.id}')" style="color:var(--danger);background:rgba(239,35,60,.13)">🗑️</button>
     </div>`).join('');
@@ -2152,7 +2196,7 @@ function buildProtocolHTML(c,p,blank){
   const seg=(label,val)=>val?`<span class="seg">${label?label+': ':''}${esc(val)}</span>`:'';
   const logo=S.logo||DEFAULT_LOGO;
 
-  const line1=[seg('IČO',S.ico),seg('DIČ',S.dic),seg('IČ DPH',S.icdph)].filter(Boolean).join('');
+  const line1=[seg('IČO',S.ico),seg('DIČ',S.dic),isVatPayer()?seg('IČ DPH',S.icdph):''].filter(Boolean).join('');
   const line2=[seg('Tel.',S.phone),seg('',S.email)].filter(Boolean).join('');
   const line3=[seg('',S.web),seg('Oprávnenie č.',S.opravnenie)].filter(Boolean).join('');
 
@@ -2269,8 +2313,8 @@ function buildProtocolHTML(c,p,blank){
       <div class="small">Zákazník svojím podpisom potvrdzuje, že práce uvedené v tomto protokole boli vykonané v deklarovanom rozsahu,
       zariadenie mu bolo odovzdané v prevádzkyschopnom stave (ak nie je v bode 7 uvedené inak) a bol oboznámený so zistenými
       závadami, odporúčaniami a s bezpečnou obsluhou zariadenia.</div>
-      <div class="sign">
-        <div class="s"><div class="line">Podpis servisného technika a pečiatka</div>
+      <div class="sign${!blank&&S.stamp?' has-stamp':''}">
+        <div class="s">${!blank&&S.stamp?`<img class="stamp" src="${S.stamp}" alt="">`:''}<div class="line">Podpis servisného technika a pečiatka</div>
           <div class="who">${esc(p.tech||S.name||'')}</div></div>
         <div class="s"><div class="line">Podpis zákazníka / preberajúceho</div>
           <div class="who">${esc(p.preb||c.name||'')}</div></div>
@@ -2291,8 +2335,11 @@ function buildProtocolHTML(c,p,blank){
 function printInvoice(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
   const base=invItems.reduce((s,i)=>(s+(i.qty||1)*(i.price||0)),0);
-  const vat=base*0.2;
+  const payer=isVatPayer();
+  const vat=payer?round2(base*VAT_RATE):0;
   const total=base+vat;
+  const taxIds=[settings.ico?'IČO: '+esc(settings.ico):'', settings.dic?'DIČ: '+esc(settings.dic):'',
+                payer&&settings.icdph?'IČ DPH: '+esc(settings.icdph):''].filter(Boolean).join('<br>');
   const invNum='INV-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-4);
   const pa=document.getElementById('printArea');
   pa.innerHTML=`
@@ -2306,7 +2353,7 @@ function printInvoice(){
           <strong>${settings.firma||'ServisKotlov'}</strong><br>
           ${settings.addr||''}<br>
           ${settings.phone||''}<br>
-          IČO: ${settings.ico||'—'}
+          ${taxIds||'IČO: —'}
         </div>
       </div>
       <div style="display:flex;gap:20px;margin-bottom:24px;">
@@ -2314,6 +2361,8 @@ function printInvoice(){
           <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Dodávateľ</div>
           <strong>${settings.firma||settings.name||'—'}</strong><br>
           ${settings.addr||''}<br>${settings.phone||''}
+          ${taxIds?'<div style="margin-top:4px;font-size:11px;color:#555">'+taxIds.replace(/<br>/g,' · ')+'</div>':''}
+          ${payer?'':'<div style="margin-top:4px;font-size:11px;color:#555">Nie je platiteľ DPH</div>'}
         </div>
         <div style="flex:1;background:#f8f9fa;padding:12px;border-radius:6px;">
           <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Odberateľ</div>
@@ -2342,21 +2391,210 @@ function printInvoice(){
       </table>
       <div style="display:flex;justify-content:flex-end;">
         <table style="font-size:13px;min-width:220px;">
-          <tr><td style="padding:4px 8px;color:#666">Základ DPH:</td><td style="padding:4px 8px;text-align:right">${base.toFixed(2)} €</td></tr>
-          <tr><td style="padding:4px 8px;color:#666">DPH 20%:</td><td style="padding:4px 8px;text-align:right">${vat.toFixed(2)} €</td></tr>
+          ${payer?`<tr><td style="padding:4px 8px;color:#666">Základ DPH:</td><td style="padding:4px 8px;text-align:right">${base.toFixed(2)} €</td></tr>
+          <tr><td style="padding:4px 8px;color:#666">DPH ${Math.round(VAT_RATE*100)}%:</td><td style="padding:4px 8px;text-align:right">${vat.toFixed(2)} €</td></tr>`:''}
           <tr style="border-top:2px solid #1a1a2e;font-weight:bold;font-size:16px;">
-            <td style="padding:8px">CELKOM:</td><td style="padding:8px;text-align:right">${total.toFixed(2)} €</td>
+            <td style="padding:8px">${payer?'CELKOM S DPH:':'CELKOM K ÚHRADE:'}</td><td style="padding:8px;text-align:right">${total.toFixed(2)} €</td>
           </tr>
         </table>
       </div>
       <div style="margin-top:30px;font-size:12px;color:#666;border-top:1px solid #eee;padding-top:10px">
-        Ďakujeme za dôveru. Platba do 14 dní od dátumu vystavenia.
+        ${payer?'':'Dodávateľ nie je platiteľom DPH.<br>'}Ďakujeme za dôveru. Platba do 14 dní od dátumu vystavenia.
       </div>
       <div style="margin-top:8px;font-size:9px;color:#999;text-align:center">${esc(licTag())}</div>
     </div>`;
   pa.style.display='block';
   window.print();
   pa.style.display='none';
+}
+
+
+// ═══════════════════════════════════════════════
+// DPH
+// ═══════════════════════════════════════════════
+const VAT_RATE = 0.23;
+function isVatPayer(){ return settings.vatPayer!==false; }
+function round2(x){ return Math.round((x+Number.EPSILON)*100)/100; }
+function toggleVatFields(){
+  const cb=document.getElementById('sVatPayer'); if(!cb) return;
+  document.getElementById('sIcdphWrap').style.display=cb.checked?'':'none';
+  document.getElementById('sTaxRow').classList.toggle('two',!cb.checked);
+}
+
+// ═══════════════════════════════════════════════
+// PEČIATKA
+// ═══════════════════════════════════════════════
+function renderStampPrev(){
+  const el=document.getElementById('stampPrev'); if(!el) return;
+  el.innerHTML=settings.stamp?`<img src="${settings.stamp}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-family:var(--mono);font-size:9px;color:#888">bez pečiatky</span>';
+}
+// Zmenší obrázok, biele/svetlé pozadie spraví priehľadné, uloží ako PNG
+function processStampImage(dataURL){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=700; const k=Math.min(1,MAX/Math.max(img.width,img.height));
+      const w=Math.max(1,Math.round(img.width*k)), h=Math.max(1,Math.round(img.height*k));
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const ctx=cv.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+      const d=ctx.getImageData(0,0,w,h), px=d.data;
+      // jas pozadia = svetlý percentil obrázka (fotka papiera nebýva čisto biela)
+      const hist=new Uint32Array(256);
+      for(let i=0;i<px.length;i+=4) hist[Math.round(.299*px[i]+.587*px[i+1]+.114*px[i+2])]++;
+      let acc=0, bg=255; const target=(px.length/4)*0.5;
+      for(let v=255;v>=0;v--){ acc+=hist[v]; if(acc>=target){ bg=v; break; } }
+      const hi=Math.max(120,bg-18), lo=Math.max(60,hi-70);
+      let minX=w,minY=h,maxX=-1,maxY=-1;
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+        const i=(y*w+x)*4, L=.299*px[i]+.587*px[i+1]+.114*px[i+2];
+        let a = L>=hi ? 0 : (L<=lo ? 255 : Math.round(255*(hi-L)/(hi-lo)));
+        a=Math.min(a,px[i+3]); px[i+3]=a;
+        if(a>40){ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+      }
+      ctx.putImageData(d,0,0);
+      if(maxX<0){ reject(new Error('Na obrázku sa nenašla pečiatka')); return; }
+      const pad=6; minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad); maxX=Math.min(w-1,maxX+pad); maxY=Math.min(h-1,maxY+pad);
+      const out=document.createElement('canvas'); out.width=maxX-minX+1; out.height=maxY-minY+1;
+      out.getContext('2d').drawImage(cv,minX,minY,out.width,out.height,0,0,out.width,out.height);
+      resolve(out.toDataURL('image/png'));
+    };
+    img.onerror=()=>reject(new Error('Obrázok sa nepodarilo načítať'));
+    img.src=dataURL;
+  });
+}
+function uploadStamp(e){
+  const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    try{ settings.stamp=await processStampImage(ev.target.result); saveSett(); renderStampPrev(); showToast('✅ Pečiatka uložená'); }
+    catch(err){ alert('❌ '+err.message); }
+  };
+  r.readAsDataURL(f);
+}
+function clearStamp(){ settings.stamp=''; saveSett(); renderStampPrev(); showToast('Pečiatka odstránená','var(--warn)'); }
+
+// ═══════════════════════════════════════════════
+// PROTOKOL → PDF → E-MAIL
+// ═══════════════════════════════════════════════
+const H2C_URL='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+const _scripts={};
+function loadScriptOnce(url){
+  if(!_scripts[url]) _scripts[url]=new Promise((res,rej)=>{
+    const s=document.createElement('script'); s.src=url; s.onload=res;
+    s.onerror=()=>{ delete _scripts[url]; rej(new Error('Nepodarilo sa načítať knižnicu (je potrebný internet)')); };
+    document.head.appendChild(s);
+  });
+  return _scripts[url];
+}
+// Jednoduchý PDF zápis: každá strana = jeden JPEG obrázok na A4
+function pdfFromJpegs(pages){
+  const enc=new TextEncoder(), parts=[], offs=[]; let len=0;
+  const push=x=>{ const b=typeof x==='string'?enc.encode(x):x; parts.push(b); len+=b.length; };
+  const obj=(n,body)=>{ offs[n]=len; push(n+' 0 obj\n'); body(); push('\nendobj\n'); };
+  const W=595.28, H=841.89, n=pages.length;
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  const kids=pages.map((_,i)=>(3+i*3)+' 0 R').join(' ');
+  obj(1,()=>push('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2,()=>push(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>`));
+  pages.forEach((p,i)=>{
+    const pn=3+i*3, cn=pn+1, imn=pn+2;
+    let dw=W, dh=p.h/p.w*W; if(dh>H){ dw=dw*H/dh; dh=H; }
+    const x=((W-dw)/2).toFixed(2), y=(H-dh).toFixed(2);
+    const content=`q ${dw.toFixed(2)} 0 0 ${dh.toFixed(2)} ${x} ${y} cm /Im0 Do Q`;
+    obj(pn,()=>push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${imn} 0 R >> >> /Contents ${cn} 0 R >>`));
+    obj(cn,()=>{ push(`<< /Length ${content.length} >>\nstream\n`); push(content); push('\nendstream'); });
+    obj(imn,()=>{ push(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\nstream\n`); push(p.bytes); push('\nendstream'); });
+  });
+  const total=2+n*3, xref=len;
+  let x='xref\n0 '+(total+1)+'\n0000000000 65535 f \n';
+  for(let i=1;i<=total;i++) x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  push(x+`trailer\n<< /Size ${total+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  const out=new Uint8Array(len); let o=0; parts.forEach(b=>{ out.set(b,o); o+=b.length; });
+  return new Blob([out],{type:'application/pdf'});
+}
+function dataURLtoBytes(u){ const b=atob(u.split(',')[1]); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i); return a; }
+async function buildProtocolPdf(c,p){
+  await loadScriptOnce(H2C_URL);
+  const pa=document.getElementById('printArea'), busy=document.getElementById('pdfBusy');
+  const prevStyle=pa.getAttribute('style');
+  busy.style.display='flex';
+  pa.innerHTML=buildProtocolHTML(c,p,false);
+  pa.setAttribute('style','display:block;position:absolute;left:0;top:0;width:210mm;background:#fff;z-index:9990');
+  const sy=window.scrollY; window.scrollTo(0,0);
+  try{
+    await Promise.all([...pa.querySelectorAll('img')].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
+    const pages=[];
+    for(const pg of pa.querySelectorAll('.sp-page')){
+      const cv=await html2canvas(pg,{scale:2,backgroundColor:'#ffffff',logging:false,useCORS:true,scrollX:0,scrollY:0,windowWidth:pg.scrollWidth});
+      pages.push({bytes:dataURLtoBytes(cv.toDataURL('image/jpeg',0.86)), w:cv.width, h:cv.height});
+    }
+    return pdfFromJpegs(pages);
+  } finally {
+    pa.innerHTML=''; if(prevStyle!==null) pa.setAttribute('style',prevStyle); else pa.removeAttribute('style');
+    window.scrollTo(0,sy); busy.style.display='none';
+  }
+}
+let mailCtx=null;
+function protoFileName(p){ return 'Servisny_protokol_'+String(p.cislo||'').replace(/[^\w-]+/g,'_')+'.pdf'; }
+async function openProtoEmail(pid){
+  const c=custs.find(x=>x.id===detailId); if(!c) return;
+  const p=(c.protocols||[]).find(x=>x.id===pid); if(!p) return;
+  const S=settings;
+  const dev=[c.boilerBrand,c.model].filter(Boolean).join(' ');
+  document.getElementById('mTo').value=c.email||'';
+  document.getElementById('mSubj').value='Servisný protokol '+(p.cislo||'')+(p.date?' zo dňa '+fmt(p.date):'');
+  document.getElementById('mBody').value=
+    'Dobrý deň,\n\nv prílohe Vám posielame servisný protokol č. '+(p.cislo||'')+(p.date?' zo dňa '+fmt(p.date):'')+
+    (dev?' k zariadeniu '+dev:'')+'.'+(p.next?'\nOdporúčaný termín ďalšej prehliadky: '+fmt(p.next)+'.':'')+
+    '\n\nS pozdravom\n'+[S.name,S.firma,S.phone,S.email].filter(Boolean).join('\n');
+  const canShareFiles=!!(navigator.canShare&&navigator.share&&navigator.canShare({files:[new File([new Blob(['x'])],'t.pdf',{type:'application/pdf'})]}));
+  const sb=document.getElementById('mShareBtn'), db=document.getElementById('mDlBtn'), st=document.getElementById('mStatus');
+  sb.style.display=canShareFiles?'':'none'; sb.disabled=true; db.disabled=true;
+  document.getElementById('mHint').innerHTML=canShareFiles
+    ? 'Poslať cez… otvorí ponuku zdieľania. Vyber Gmail, Outlook alebo Mail – PDF bude v prílohe, adresáta doplň v e-maile.<br>Stiahnuť PDF otvorí e-mail s vyplneným adresátom, PDF priložíš z Downloads/Súbory.'
+    : 'PDF sa stiahne a otvorí sa e-mail s vyplneným adresátom. Stiahnutý súbor do e-mailu prilož (zo Stiahnutých súborov).';
+  st.textContent='⏳ Pripravujem PDF…'; st.style.color='var(--muted)';
+  mailCtx={cid:c.id, pid, file:null};
+  document.getElementById('mailModal').classList.add('open');
+  try{
+    const blob=await buildProtocolPdf(c,p);
+    if(!mailCtx||mailCtx.pid!==pid) return;
+    mailCtx.file=new File([blob],protoFileName(p),{type:'application/pdf'});
+    st.textContent='✅ PDF pripravené · '+protoFileName(p)+' · '+Math.round(blob.size/1024)+' kB'; st.style.color='var(--accent3)';
+    sb.disabled=false; db.disabled=false;
+  }catch(err){
+    st.textContent='❌ '+err.message; st.style.color='var(--danger)';
+  }
+}
+function closeMailModal(){ document.getElementById('mailModal').classList.remove('open'); mailCtx=null; }
+function rememberMailTo(){
+  const to=document.getElementById('mTo').value.trim();
+  const c=mailCtx&&custs.find(x=>x.id===mailCtx.cid);
+  if(c && to && c.email!==to){ c.email=to; save(); }
+  return to;
+}
+async function mailShare(){
+  if(!mailCtx||!mailCtx.file) return;
+  const to=rememberMailTo();
+  const subj=document.getElementById('mSubj').value, body=document.getElementById('mBody').value;
+  try{
+    await navigator.share({files:[mailCtx.file], title:subj, text:body});
+    showToast('✅ Odoslané do aplikácie'+(to?' · adresát: '+to:''));
+    closeMailModal();
+  }catch(err){
+    if(err&&err.name==='AbortError') return;
+    alert('Zdieľanie sa nepodarilo: '+(err&&err.message||err)+'\nPoužite tlačidlo Stiahnuť PDF a otvoriť e-mail.');
+  }
+}
+function mailDownload(){
+  if(!mailCtx||!mailCtx.file) return;
+  const to=rememberMailTo();
+  const url=URL.createObjectURL(mailCtx.file);
+  const a=document.createElement('a'); a.href=url; a.download=mailCtx.file.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  const subj=document.getElementById('mSubj').value;
+  const body=document.getElementById('mBody').value+'\n\n[Príloha: '+mailCtx.file.name+']';
+  setTimeout(()=>{ location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body); },700);
 }
 
 // ═══════════════════════════════════════════════
@@ -2373,6 +2611,8 @@ function loadSett(){
   });
   const navSel=document.getElementById('sNavApp'); if(navSel)navSel.value=settings.navApp||'auto';
   renderLogoPrev();
+  renderStampPrev();
+  const vp=document.getElementById('sVatPayer'); if(vp){ vp.checked=isVatPayer(); toggleVatFields(); }
   renderDriveDiag();
   updateStorageUI();
   updateFolderUI();
@@ -2385,6 +2625,7 @@ function saveSettings(){
   settings.addr=document.getElementById('sAddr').value;
   settings.interval=parseInt(document.getElementById('sInterval').value);
   const navSel=document.getElementById('sNavApp'); if(navSel)settings.navApp=navSel.value;
+  const vp=document.getElementById('sVatPayer'); if(vp) settings.vatPayer=vp.checked;
   ['Email:email','Ico:ico','Dic:dic','Icdph:icdph','Web:web','Opr:opravnenie','Analyzer:analyzer','AnalyzerCal:analyzerCal'].forEach(pair=>{
     const [id,key]=pair.split(':'); const el=document.getElementById('s'+id); if(el)settings[key]=el.value;
   });
@@ -3124,7 +3365,7 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowLeft') pvPrev();
 });
 
-['custModal','detailModal','histModal','driveHelpModal','licModal'].forEach(id=>{
+['custModal','detailModal','histModal','driveHelpModal','licModal','mailModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
