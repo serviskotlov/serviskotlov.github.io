@@ -1051,6 +1051,32 @@ const FREE_LIMIT = 10;
 const LIC_PUBKEY = {"kty":"EC","crv":"P-256","x":"jHq6jjFBOFnyixwtu2xvyrCd6zp8QSYoCMoCp5jU7RE","y":"dUFMhCurQ7Wt1tsqVWK9mM0y40oHWPZFSx0yFRxt6h8"};
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
+// Adresa servera pre online aktiváciu (Cloudflare Worker). Prázdne = len offline overenie.
+const LIC_API = '';
+const LIC_RECHECK_DAYS = 3;   // ako často sa licencia overí online (keď je internet)
+const LIC_GRACE_DAYS   = 30;  // koľko dní funguje licencia bez overenia (bez signálu)
+
+function todayISO(){ return new Date().toISOString().split('T')[0]; }
+function daysSince(iso){ if(!iso) return 9999; return Math.floor((new Date(todayISO())-new Date(iso))/86400000); }
+function deviceId(){
+  let d=localStorage.getItem('sk2_device');
+  if(!d){ d=(uid()+uid()).replace(/[^\w-]/g,''); localStorage.setItem('sk2_device',d); }
+  return d;
+}
+function deviceLabel(){
+  const u=navigator.userAgent;
+  const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows':/Mac/.test(u)?'Mac':/Linux/.test(u)?'Linux':'Zariadenie';
+  const br=/Edg\//.test(u)?'Edge':/CriOS|Chrome\//.test(u)?'Chrome':/FxiOS|Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'';
+  return os+(br?' · '+br:'');
+}
+function getAct(){ try{ return JSON.parse(localStorage.getItem('sk2_lic_act')||'null'); }catch(e){ return null; } }
+async function licApi(path, body){
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const r=await fetch(LIC_API.replace(/\/+$/,'')+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
 
 function b64uToBytes(s){
   s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='=';
@@ -1075,20 +1101,90 @@ async function verifyLicenseKey(key){
   }
   return {ok:true, payload};
 }
-async function checkLicense(){
+async function computeLicense(){
   const key=localStorage.getItem('sk2_license')||'';
-  if(!key){ LIC={valid:false, limit:FREE_LIMIT, reason:''}; }
-  else{
-    const r=await verifyLicenseKey(key);
-    if(r.ok){
-      const p=r.payload;
-      LIC={valid:true, limit:p.l?Number(p.l):Infinity, name:p.n||'', email:p.e||'', exp:p.x||'', reason:''};
+  if(!key){ LIC={valid:false, limit:FREE_LIMIT, reason:''}; return LIC; }
+  const r=await verifyLicenseKey(key);
+  if(!r.ok){
+    LIC={valid:false, limit:FREE_LIMIT, reason:r.reason, expired:!!r.expired, name:(r.payload||{}).n||'', hasKey:true};
+    return LIC;
+  }
+  const p=r.payload;
+  LIC={valid:true, limit:p.l?Number(p.l):Infinity, name:p.n||'', email:p.e||'', exp:p.x||'', reason:'', hasKey:true};
+  if(LIC_API){
+    const act=getAct();
+    if(!act || act.key!==key){
+      LIC={valid:false, limit:FREE_LIMIT, name:p.n||'', hasKey:true, needsActivation:true,
+           reason:localStorage.getItem('sk2_lic_msg')||'Licencia nie je aktivovaná na tomto zariadení — ťukni na Aktivovať (treba internet)'};
     } else {
-      LIC={valid:false, limit:FREE_LIMIT, reason:r.reason, expired:!!r.expired, name:(r.payload||{}).n||''};
+      LIC.lastCheck=act.last;
+      if(daysSince(act.last)>LIC_GRACE_DAYS){
+        LIC={valid:false, limit:FREE_LIMIT, name:p.n||'', hasKey:true, needsActivation:true,
+             reason:'Licenciu treba overiť cez internet (naposledy '+fmt(act.last)+'). Pripoj sa a otvor aplikáciu znova.'};
+      }
     }
   }
-  renderLicUI();
   return LIC;
+}
+async function checkLicense(){
+  await computeLicense();
+  renderLicUI();
+  maybeOnlineCheck();
+  return LIC;
+}
+// Overenie na serveri — na pozadí, nikdy nezablokuje prácu bez signálu
+let licChecking=false;
+async function maybeOnlineCheck(force){
+  if(!LIC_API || licChecking) return;
+  const key=localStorage.getItem('sk2_license'); const act=getAct();
+  if(!key || !act || act.key!==key) return;
+  if(!force && daysSince(act.last)<LIC_RECHECK_DAYS) return;
+  if(navigator.onLine===false) return;
+  licChecking=true;
+  try{
+    const res=await licApi('/check',{key, device:deviceId()});
+    if(res && res.ok){
+      act.last=todayISO(); localStorage.setItem('sk2_lic_act',JSON.stringify(act));
+    } else if(res && res.deny){
+      localStorage.removeItem('sk2_lic_act');
+      localStorage.setItem('sk2_lic_msg',res.reason||'Licencia nie je platná');
+      showToast('⚠️ '+(res.reason||'Licencia nie je platná'),'var(--danger)');
+    }
+    await computeLicense(); renderLicUI();
+  }catch(e){ /* bez internetu — skúsi sa nabudúce */ }
+  finally{ licChecking=false; }
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) maybeOnlineCheck(); });
+function licTag(){
+  return 'ServisKotlov PRO · '+(LIC.valid?('licencia: '+(LIC.name||LIC.email||'—')):'bezplatná verzia');
+}
+
+// ── Kontrola limitu pri importe / obnove zálohy ─────────
+// Príznak "demo" sa prijme len pre pôvodných 4 ukážkových zákazníkov,
+// aby sa nedal v súbore dopísať ku skutočným zákazníkom.
+const DEMO_NAMES=['Ján Kováč','Mária Slobodová','Peter Blaho','Anna Horváthová'];
+function sanitizeImported(arr){
+  const used=new Set();
+  return (Array.isArray(arr)?arr:[]).map(c=>{
+    if(!c||!c.demo) return c;
+    const o={...c};
+    if(DEMO_NAMES.includes(o.name) && !used.has(o.name)) used.add(o.name);
+    else delete o.demo;
+    return o;
+  });
+}
+// Vráti vyčistený zoznam, alebo null ak prekračuje limit (vtedy sa nič nenačíta)
+function checkImportLimit(arr){
+  const list=sanitizeImported(arr);
+  const n=list.filter(c=>c&&!c.demo).length;
+  if(n<=LIC.limit) return list;
+  alert('⚠️ Záloha sa nenačítala.\n\n'
+    + 'Obsahuje '+n+' zákazníkov, '+(LIC.valid?'tvoja licencia':'bezplatná verzia')+' umožňuje '+limitTxt()+'.\n'
+    + (LIC.reason?LIC.reason+'\n':'')
+    + '\nTvoje aktuálne dáta ani súbor zálohy sa nezmenili.\n'
+    + 'Po aktivácii licencie (Nastavenia → Licencia) zálohu obnov znova.\n\n'
+    + 'Licencia: '+LIC_SELLER.email+' · '+LIC_SELLER.phone);
+  return null;
 }
 function countedCusts(){ return custs.filter(c=>!c.demo).length; }
 function canAddCustomer(){ return countedCusts() < LIC.limit; }
@@ -1126,12 +1222,14 @@ function renderLicUI(){
          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
          ${LIC.name?'Pre: '+esc(LIC.name)+'<br>':''}${LIC.email?esc(LIC.email)+'<br>':''}
          Zákazníkov: ${used} / ${limitTxt()}<br>
-         Platnosť: ${LIC.exp?'do '+fmt(LIC.exp):'bez obmedzenia'}</div>`;
+         Platnosť: ${LIC.exp?'do '+fmt(LIC.exp):'bez obmedzenia'}
+         ${LIC_API?'<br>Overené online: '+(LIC.lastCheck?fmt(LIC.lastCheck):'—')+' · '+esc(deviceLabel()):''}</div>`;
     } else {
       const pct=Math.min(100,used/FREE_LIMIT*100);
       const col=used>=FREE_LIMIT?'var(--danger)':(used>=FREE_LIMIT-2?'var(--warn)':'var(--accent3)');
       h=`<div style="font-weight:600;margin-bottom:6px">Bezplatná verzia</div>
          ${LIC.reason?`<div style="font-family:var(--mono);font-size:11px;color:var(--danger);margin-bottom:6px">${esc(LIC.reason)}</div>`:''}
+         ${LIC.needsActivation?`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px">Kľúč je uložený — stačí ťuknúť na Aktivovať licenciu.</div>`:''}
          <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;margin-bottom:6px">
            <span style="color:var(--muted)">Zákazníci</span><span style="color:${col}">${used} / ${FREE_LIMIT}</span></div>
          <div style="height:7px;background:var(--surf3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col}"></div></div>
@@ -1157,18 +1255,32 @@ function renderLicUI(){
   }
 }
 async function activateLicense(){
-  const key=(document.getElementById('licInput').value||'').replace(/\s+/g,'');
+  const inp=(document.getElementById('licInput').value||'').replace(/\s+/g,'');
+  const key=inp||localStorage.getItem('sk2_license')||'';
   if(!key){ alert('Vlož licenčný kľúč.'); return; }
   const r=await verifyLicenseKey(key);
   if(!r.ok){ alert('❌ '+r.reason); return; }
+  if(LIC_API){
+    let res;
+    try{ res=await licApi('/activate',{key, device:deviceId(), label:deviceLabel()}); }
+    catch(e){ alert('📶 Na aktiváciu licencie je potrebný internet.\nPripoj sa a skús znova.'); return; }
+    if(!res || !res.ok){ alert('❌ '+((res&&res.reason)||'Aktivácia sa nepodarila')); return; }
+    localStorage.setItem('sk2_lic_act',JSON.stringify({key, last:todayISO()}));
+    localStorage.removeItem('sk2_lic_msg');
+  }
   localStorage.setItem('sk2_license',key);
   document.getElementById('licInput').value='';
   await checkLicense();
   showToast('✅ Licencia aktivovaná');
 }
 async function removeLicense(){
-  if(!confirm('Odstrániť licenciu z tohto zariadenia?\nDáta zostanú, len sa vráti limit bezplatnej verzie.'))return;
-  localStorage.removeItem('sk2_license');
+  if(!confirm('Odstrániť licenciu z tohto zariadenia?\nDáta zostanú, len sa vráti limit bezplatnej verzie.'+(LIC_API?'\nZariadenie sa uvoľní a licenciu môžeš aktivovať inde.':'')))return;
+  const key=localStorage.getItem('sk2_license');
+  if(LIC_API && key){
+    try{ await licApi('/release',{key, device:deviceId()}); }
+    catch(e){ if(!confirm('Bez internetu sa zariadenie na serveri neuvoľní (miesto ostane obsadené).\nPokračovať?')) return; }
+  }
+  localStorage.removeItem('sk2_license'); localStorage.removeItem('sk2_lic_act'); localStorage.removeItem('sk2_lic_msg');
   await checkLicense();
   showToast('Licencia odstránená','var(--warn)');
 }
@@ -2168,6 +2280,7 @@ function buildProtocolHTML(c,p,blank){
       <span>${esc([S.firma,S.addr,S.ico?'IČO '+S.ico:'',S.phone].filter(Boolean).join(' · '))}</span>
       <span>Protokol ${esc(p.cislo||'')}${blank?'':' · '+fmt(p.date)}</span>
     </div>
+    <div style="font-size:6.5pt;color:#8a929c;text-align:center;margin-top:1mm">${esc(licTag())}</div>
    </div>
   </div>`;
 }
@@ -2239,6 +2352,7 @@ function printInvoice(){
       <div style="margin-top:30px;font-size:12px;color:#666;border-top:1px solid #eee;padding-top:10px">
         Ďakujeme za dôveru. Platba do 14 dní od dátumu vystavenia.
       </div>
+      <div style="margin-top:8px;font-size:9px;color:#999;text-align:center">${esc(licTag())}</div>
     </div>`;
   pa.style.display='block';
   window.print();
@@ -2466,7 +2580,7 @@ function exportJSON(){
 function importJSON(e){
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.custs){custs=d.custs;save({allowLess:true, allowEmpty:true});storageWiped=false;}if(d.settings){settings=d.settings;saveSett();}renderCusts();renderDash();alert('✅ Import úspešný: '+custs.length+' zákazníkov');}catch{alert('Chyba importu');}};
+  r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.custs){const l=checkImportLimit(d.custs);if(!l)return;custs=l;save({allowLess:true, allowEmpty:true});storageWiped=false;}if(d.settings){settings=d.settings;saveSett();}renderCusts();renderDash();alert('✅ Import úspešný: '+custs.length+' zákazníkov');}catch{alert('Chyba importu');}};
   r.readAsText(f); e.target.value='';
 }
 async function clearAll(){
@@ -2687,7 +2801,7 @@ async function restoreFromFolder(){
     const fh = await folderHandle.getFileHandle(FOLDER_FILE);
     const txt = await (await fh.getFile()).text();
     const d = JSON.parse(txt);
-    if(d.custs){ custs = d.custs; await save(true); storageWiped=false; }
+    if(d.custs){ const l=checkImportLimit(d.custs); if(!l) return; custs = l; await save(true); storageWiped=false; }
     if(d.settings){ const cid=settings.driveClientId; settings=d.settings; if(cid)settings.driveClientId=cid; saveSett(); }
     renderCusts(); renderDash(); loadSett();
     alert('✅ Obnovené: '+custs.length+' zákazníkov\nZáloha z: '+(d.ts?new Date(d.ts).toLocaleString('sk-SK'):'—'));
@@ -2961,7 +3075,11 @@ async function driveRestore(){
     );
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
-    if(data.custs){ custs = data.custs; save({allowLess:true, allowEmpty:true}); storageWiped=false; }
+    if(data.custs){
+      const l=checkImportLimit(data.custs);
+      if(!l){ btn.textContent='⬇️ Obnoviť zálohu z Google Drive'; btn.disabled=false; return; }
+      custs = l; save({allowLess:true, allowEmpty:true}); storageWiped=false;
+    }
     if(data.settings){
       // Zachovaj Client ID z aktuálneho zariadenia
       const localClientId = settings.driveClientId;
