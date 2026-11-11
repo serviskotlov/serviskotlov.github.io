@@ -1052,7 +1052,7 @@ const LIC_PUBKEY = {"kty":"EC","crv":"P-256","x":"jHq6jjFBOFnyixwtu2xvyrCd6zp8QS
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
 // Adresa servera pre online aktiváciu (Cloudflare Worker). Prázdne = len offline overenie.
-const LIC_API = '';
+const LIC_API = 'https://serviskotlov-licencie.gappa1972.workers.dev/';
 const LIC_RECHECK_DAYS = 3;   // ako často sa licencia overí online (keď je internet)
 const LIC_GRACE_DAYS   = 30;  // koľko dní funguje licencia bez overenia (bez signálu)
 
