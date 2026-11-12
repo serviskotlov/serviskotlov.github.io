@@ -350,6 +350,7 @@ input[type="file"]{display:none;}
 
 <!-- PAGE: DASHBOARD -->
 <div class="pg active" id="page-dashboard">
+  <div id="backupBanner"></div>
   <div id="licBanner"></div>
   <div class="sgrid">
     <div class="sc a"><div class="n" id="sTotal">0</div><div class="l">zákazníkov</div></div>
@@ -495,6 +496,7 @@ input[type="file"]{display:none;}
   <button class="btn btn-s" style="margin-top:6px" onclick="exportJSON()">📤 Export JSON (záloha)</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('importFile').click()">📥 Import JSON</button>
   <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
+  <button class="btn btn-s" id="undoRestoreBtn" style="margin-top:6px;display:none" onclick="restorePrevData()">↩️ Vrátiť dáta spred poslednej obnovy</button>
   <button class="btn btn-d" style="margin-top:12px" onclick="clearAll()">🗑️ Vymazať všetky dáta</button>
 </div>
 
@@ -898,6 +900,9 @@ let persistGranted = false;
 let storageReady = false;      // true až keď sú načítané kompletné dáta
 let bootPromise = null;
 let storageWiped = false;      // úložisko sa stratilo (vymazané systémom)
+let storageFailed = false;     // úložisko sa nepodarilo otvoriť — nič nezapisujeme
+let myRev = '';                // značka posledného zápisu, ktorý toto okno videlo
+let lastSaveReloaded = false;  // save() namiesto zápisu načítal novší stav z iného okna
 
 function countPhotos(arr){
   return (arr||[]).reduce((n,c)=>n+((c&&c.photos||[]).length),0);
@@ -917,6 +922,25 @@ let filterVal = 'all';
 let invItems = [];
 let map = null, mapMarkers = [];
 
+// ── Dátumy: vždy miestny čas, nikdy UTC ─────────────────
+const pad2=n=>String(n).padStart(2,'0');
+function isoLocal(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function todayISO(){ return isoLocal(new Date()); }
+function isISO(s){ return typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+function parseISO(iso){ const [y,m,d]=iso.split('-').map(Number); return new Date(y,m-1,d); }
+// Pripočíta mesiace; ak cieľový mesiac taký deň nemá, vezme jeho posledný deň (31.8. + 6 = 28.2.)
+function addMonthsISO(iso,n){
+  if(!isISO(iso)) iso=todayISO();
+  let [y,m,d]=iso.split('-').map(Number);
+  const t=(m-1)+(parseInt(n)||0); y+=Math.floor(t/12); m=((t%12)+12)%12;
+  const last=new Date(y,m+1,0).getDate();
+  return y+'-'+pad2(m+1)+'-'+pad2(Math.min(d,last));
+}
+function daysUntil(iso){
+  if(!isISO(iso)) return NaN;
+  const [y,m,d]=iso.split('-').map(Number), n=new Date();
+  return Math.round((Date.UTC(y,m-1,d)-Date.UTC(n.getFullYear(),n.getMonth(),n.getDate()))/86400000);
+}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 function showToast(msg, color){
   const t=document.getElementById('toast');
@@ -947,7 +971,7 @@ function openDB(){
     req.onsuccess = e=>{ DB=e.target.result; res(DB); };
     req.onerror   = ()=>res(null);
     req.onblocked = ()=>res(null);
-    setTimeout(()=>res(DB), 4000);   // poistka proti zaseknutiu
+    setTimeout(()=>res(DB), 15000);  // poistka proti zaseknutiu (pomalý štart telefónu trvá aj niekoľko sekúnd)
   });
   return dbReady;
 }
@@ -995,6 +1019,11 @@ async function save(opts){
       return false;
     }
   }
+  lastSaveReloaded = false;
+  if(storageFailed){
+    showToast('⚠️ Úložisko sa neotvorilo — zatvor a znova otvor aplikáciu','var(--danger)');
+    return false;
+  }
   if(storageWiped && !opts.allowLess){
     showToast('⚠️ Zápis zastavený — najprv obnov zálohu','var(--danger)');
     return false;
@@ -1009,18 +1038,36 @@ async function save(opts){
     try{
       // 2) Poistka: nikdy neuložiť stav, ktorý by ubral fotky alebo zákazníkov,
       //    pokiaľ to nie je výslovne povolené (mazanie, import, obnova zálohy).
+      // 1b) Iné okno / karta medzitým zapísalo novší stav — neprepíšeme ho starým.
+      if(!opts.force){
+        const cur = localStorage.getItem('sk2_rev')||'';
+        if(cur !== myRev){
+          await reloadFromStorage();
+          lastSaveReloaded = true;
+          closeAllModals();
+          alert('⚠️ Dáta boli medzitým zmenené v inom okne alebo karte.\n\n'
+            + 'Načítal som aktuálny stav, nič sa neprepísalo. Poslednú zmenu zadaj znova.');
+          return false;
+        }
+      }
       if(!opts.allowLess){
         const stored = await idbGet('custs');
         if(Array.isArray(stored)){
           const fotkyPred=countPhotos(stored), fotkyTeraz=countPhotos(custs);
-          if(fotkyTeraz<fotkyPred || stored.length>custs.length){
-            console.error('save() zastavený — úbytok dát', {fotkyPred, fotkyTeraz, pred:stored.length, teraz:custs.length});
+          if(stored.length>custs.length){
+            console.error('save() zastavený — úbytok zákazníkov', {pred:stored.length, teraz:custs.length});
+            showToast('⚠️ Zápis zastavený — chýbali by zákazníci ('+custs.length+' namiesto '+stored.length+')','var(--danger)');
+            return false;
+          }
+          if(fotkyTeraz<fotkyPred && !opts.allowFewerPhotos){
+            console.error('save() zastavený — úbytok fotiek', {fotkyPred, fotkyTeraz});
             showToast('⚠️ Zápis zastavený — chýbali by fotky','var(--danger)');
             return false;
           }
         }
       }
       await idbSet('custs', custs);
+      bumpRev();
       try{ localStorage.setItem('sk2_idb','1'); }catch(e){}
       try{ localStorage.removeItem('sk2_custs'); }catch(e){}   // starý 5 MB sklad už netreba
       mirrorToLocalStorage();
@@ -1047,6 +1094,30 @@ async function save(opts){
     return false;
   }
 }
+
+// ── Súbeh viacerých okien / kariet ──────────────────────
+function bumpRev(){
+  try{ localStorage.setItem('sk2_rev', Date.now().toString(36)+Math.random().toString(36).slice(2,6)); }catch(e){}
+  myRev = localStorage.getItem('sk2_rev')||'';
+}
+function closeAllModals(){ document.querySelectorAll('.ov-bg.open').forEach(m=>m.classList.remove('open')); }
+async function reloadFromStorage(){
+  try{
+    const s = await idbGet('custs');
+    if(Array.isArray(s)) custs = s;
+  }catch(e){}
+  myRev = localStorage.getItem('sk2_rev')||'';
+  renderDash(); renderCusts();
+}
+async function syncFromOtherWindow(){
+  if(!storageReady || !DB || storageFailed || storageWiped) return;
+  if((localStorage.getItem('sk2_rev')||'') === myRev) return;
+  if(document.querySelector('.ov-bg.open')) return;      // počas úpravy nič nemeníme; ošetrí to save()
+  await reloadFromStorage();
+  showToast('🔄 Načítané zmeny z iného okna','var(--accent)');
+}
+window.addEventListener('storage', e=>{ if(e.key==='sk2_rev') syncFromOtherWindow(); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncFromOtherWindow(); });
 
 // ── Informácie o úložisku ───────────────────────────────
 function fmtBytes(b){
@@ -1115,7 +1186,6 @@ const LIC_API = '';
 const LIC_RECHECK_DAYS = 3;   // ako často sa licencia overí online (keď je internet)
 const LIC_GRACE_DAYS   = 30;  // koľko dní funguje licencia bez overenia (bez signálu)
 
-function todayISO(){ return new Date().toISOString().split('T')[0]; }
 function daysSince(iso){ if(!iso) return 9999; return Math.floor((new Date(todayISO())-new Date(iso))/86400000); }
 function deviceId(){
   let d=localStorage.getItem('sk2_device');
@@ -1155,7 +1225,7 @@ async function verifyLicenseKey(key){
     if(!ok) return {ok:false, reason:'Kľúč nie je platný'};
   }catch(e){ return {ok:false, reason:'Kľúč sa nepodarilo overiť'}; }
   if(payload.x){
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     if(payload.x<today) return {ok:false, expired:true, payload, reason:'Platnosť licencie skončila '+fmt(payload.x)};
   }
   return {ok:true, payload};
@@ -1359,7 +1429,7 @@ function seedDemoIfEmpty(){
   if(localStorage.getItem('sk2_idb')) return;   // úložisko sa už používalo
   if(localStorage.getItem('sk2_seeded')) return;
   {
-  const td=new Date(), ad=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().split('T')[0];};
+  const td=new Date(), ad=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return isoLocal(x);};
   custs=[
     {id:uid(),name:'Ján Kováč',demo:true,phone:'+421 911 123 456',city:'Senica',addr:'Hurbanova 5',boilerBrand:'Vaillant ecoTEC plus',model:'VU 246/3-5 R3',boilerType:'Plynový kondenzačný',year:'2019',power:'24',serial:'DSN123456',lastService:ad(td,-370),nextService:ad(td,-5),notes:'Zákazník má starý expanzný nádobník.',lat:48.6804,lng:17.3644,photos:[],history:[{id:uid(),date:ad(td,-370),type:'Ročná prehliadka',desc:'Čistenie horáka, kontrola tlaku, výmena filtra.',labor:80,parts:15,tech:'Technik'}],invoice:[]},
     {id:uid(),name:'Mária Slobodová',demo:true,phone:'+421 905 234 567',city:'Holíč',addr:'Záhradná 12',boilerBrand:'Protherm Panther',model:'25 KOV',boilerType:'Plynový klasický',year:'2016',power:'25',serial:'',lastService:ad(td,-340),nextService:ad(td,18),notes:'F83 chyba – zapaľovanie, vyriešené čistením.',lat:48.8142,lng:17.1602,photos:[],history:[{id:uid(),date:ad(td,-340),type:'Oprava',desc:'Chyba F83 – vyčistený zapaľovač, vymenená elektróda.',labor:65,parts:28,tech:'Technik'}],invoice:[]},
@@ -1404,11 +1474,26 @@ async function bootStorage(){
           showToast('✅ Dáta presunuté do väčšieho úložiska');
         }
       }
-    }catch(e){ console.warn('boot', e); }
+    }catch(e){
+      console.warn('boot', e);
+      storageFailed = true; custs = [];
+    }
+  } else if(maMarker){
+    // Úložisko tu už dáta malo, ale teraz sa neotvorilo (pomalý alebo zaseknutý štart).
+    // Nezačíname z prázdna — akýkoľvek zápis by prepísal skutočné dáta.
+    storageFailed = true; custs = [];
   } else {
     // Bez IndexedDB — núdzový režim na localStorage
     try{ custs = JSON.parse(localStorage.getItem('sk2_custs')||'[]'); }catch(e){ custs=[]; }
+    if(!Array.isArray(custs)) custs=[];
   }
+  if(storageFailed){
+    setTimeout(()=>alert('⚠️ Úložisko telefónu sa nepodarilo otvoriť.\n\n'
+      + 'Tvoje dáta sú v bezpečí — nič sa neprepísalo a kým sa úložisko neotvorí, '
+      + 'aplikácia nič nezapíše.\n\nÚplne zatvor aplikáciu a otvor ju znova. '
+      + 'Ak to nepomôže, reštartuj telefón.'), 600);
+  }
+  myRev = localStorage.getItem('sk2_rev')||'';
   if(navigator.storage && navigator.storage.persist){
     try{
       persistGranted = await navigator.storage.persisted();
@@ -1416,7 +1501,7 @@ async function bootStorage(){
     }catch(e){}
   }
   storageReady = true;
-  if(!storageWiped) seedDemoIfEmpty();
+  if(!storageWiped && !storageFailed) seedDemoIfEmpty();
   renderDash(); renderCusts();
   updateStorageUI();
   updateFolderUI();
@@ -1445,9 +1530,13 @@ function devShort(c,id){
   const l=devList(c), i=l.findIndex(d=>d.id===(id||'main')); const d=l[i<0?0:i];
   return (i<0?1:i+1)+'. '+(d.place||d.boilerBrand||'zariadenie');
 }
-function effNext(c){ const ds=devList(c).map(d=>d.nextService).filter(Boolean).sort(); return ds[0]||''; }
-function dueDev(c){ const l=devList(c).filter(d=>d.nextService).sort((a,b)=>a.nextService.localeCompare(b.nextService)); return l[0]||devList(c)[0]; }
+function effNext(c){ const ds=devList(c).map(d=>d.nextService).filter(isISO).sort(); return ds[0]||''; }
+function dueDev(c){ const l=devList(c).filter(d=>isISO(d.nextService)).sort((a,b)=>a.nextService.localeCompare(b.nextService)); return l[0]||devList(c)[0]; }
 function setDevDates(c,id,last,next){
+  // Záznam starší ako posledná známa prehliadka termíny nemení
+  // (oprava preklepu v starom zázname by inak vrátila termín o roky späť).
+  const cur=(getDev(c,id)||{}).lastService||'';
+  if(last && isISO(cur) && last<cur) return false;
   if(!id||id==='main'){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
   const d=(c.devices||[]).find(x=>x.id===id); if(!d){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
   if(last)d.lastService=last; if(next)d.nextService=next;
@@ -1555,19 +1644,19 @@ function scanSearch(){
   });
 }
 function stOfDate(next){
-  if(!next)return'none';
-  const d=Math.ceil((new Date(next)-new Date())/86400000);
+  if(!isISO(next))return'none';
+  const d=daysUntil(next);
   if(d<0)return'ov'; if(d<=7)return'd'; if(d<=30)return'w'; return'ok';
 }
 function getSt(c){ return stOfDate(effNext(c)); }
 function getDaysText(c){
   const nx=effNext(c);
-  if(!nx)return'—';
-  const d=Math.ceil((new Date(nx)-new Date())/86400000);
+  if(!isISO(nx))return'—';
+  const d=daysUntil(nx);
   if(d<0)return`Po termíne ${Math.abs(d)} dní`;
   if(d===0)return'DNES ❗'; return`Za ${d} dní`;
 }
-function fmt(d){if(!d)return'—';const[y,m,day]=d.split('-');return`${day}.${m}.${y}`;}
+function fmt(d){if(!isISO(d))return'—';const[y,m,day]=d.split('-');return`${day}.${m}.${y}`;}
 function stLabel(s){return{ov:'PO TERMÍNE',d:'< 7 DNÍ',w:'< 30 DNÍ',ok:'V PORIADKU',none:'BEZ DÁTUMU'}[s]||'—';}
 function stColor(s){return{ov:'var(--danger)',d:'var(--danger)',w:'var(--warn)',ok:'var(--accent3)',none:'var(--muted)'}[s]||'var(--muted)';}
 function stDot(s){return{ov:'🔴',d:'🟠',w:'🟡',ok:'🟢',none:'⚪'}[s]||'⚪';}
@@ -1603,6 +1692,7 @@ function switchTab(id, btn){
 // DASHBOARD
 // ═══════════════════════════════════════════════
 function renderDash(){
+  renderBackupBanner();
   renderLicUI();
   const ss=custs.map(getSt);
   document.getElementById('sTotal').textContent=custs.length;
@@ -1621,16 +1711,16 @@ function renderDash(){
   const attn=custs.filter(c=>['ov','d','w'].includes(getSt(c))).sort((a,b)=>new Date(effNext(a))-new Date(effNext(b)));
   const al=document.getElementById('alertList');
   if(!attn.length){al.innerHTML='<div class="empty"><div class="empty-ic">✅</div>Všetci v poriadku</div>';}
-  else{al.innerHTML=attn.map(c=>{const s=getSt(c);return`<div class="ai ${s}" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(s)}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${esc(hasMulti(c)?devLabel(dueDev(c)):(c.boilerBrand||'—'))} · ${getDaysText(c)} · ${c.city||''}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;}).join('');}
+  else{al.innerHTML=attn.map(c=>{const s=getSt(c);return`<div class="ai ${s}" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(s)}</div><div class="ai-tx"><div class="ai-nm">${esc(c.name)}</div><div class="ai-ds">${esc(hasMulti(c)?devLabel(dueDev(c)):(c.boilerBrand||'—'))} · ${getDaysText(c)} · ${esc(c.city||'')}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;}).join('');}
 
   // Month stats — vždy aktualizuj
   const now=new Date(), m=now.getMonth(), y=now.getFullYear();
-  const inMonth=d=>d.nextService&&new Date(d.nextService).getMonth()===m&&new Date(d.nextService).getFullYear()===y;
+  const inMonth=d=>isISO(d.nextService)&&parseISO(d.nextService).getMonth()===m&&parseISO(d.nextService).getFullYear()===y;
   const thisMonth=custs.filter(c=>devList(c).some(inMonth));
   const ms=document.getElementById('monthStats');
   if(!thisMonth.length){ms.innerHTML='<div class="empty"><div class="empty-ic">📅</div>Žiadne prehliadky tento mesiac</div>';}
   else{ms.innerHTML=`<div class="df"><div class="dl">Prehliadky tento mesiac</div><div class="dv" style="color:var(--accent)">${thisMonth.length} zákazníkov</div></div>`+
-    thisMonth.map(c=>`<div class="ai" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(getSt(c))}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${devList(c).filter(inMonth).map(d=>fmt(d.nextService)+(hasMulti(c)?' ('+esc(devShort(c,d.id))+')':'')).join(', ')} · ${c.city||''}</div></div></div>`).join('');}
+    thisMonth.map(c=>`<div class="ai" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(getSt(c))}</div><div class="ai-tx"><div class="ai-nm">${esc(c.name)}</div><div class="ai-ds">${devList(c).filter(inMonth).map(d=>fmt(d.nextService)+(hasMulti(c)?' ('+esc(devShort(c,d.id))+')':'')).join(', ')} · ${esc(c.city||'')}</div></div></div>`).join('');}
 }
 
 // ═══════════════════════════════════════════════
@@ -1650,11 +1740,11 @@ function renderCusts(){
   }).sort((a,b)=>stOrd[getSt(a)]-stOrd[getSt(b)]);
   const el=document.getElementById('custList');
   if(!storageReady){el.innerHTML='<div class="empty"><div class="empty-ic">⏳</div>Načítavam dáta…</div>';return;}
-  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ic">🔍</div>'+(storageWiped?'Dáta sa nenašli — obnov zálohu v Nastaveniach':'Žiadni zákazníci nenájdení')+'</div>';return;}
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ic">🔍</div>'+(storageFailed?'Úložisko sa neotvorilo — zatvor a znova otvor aplikáciu':(storageWiped?'Dáta sa nenašli — obnov zálohu v Nastaveniach':'Žiadni zákazníci nenájdení'))+'</div>';return;}
   el.innerHTML=list.map(c=>{const s=getSt(c);return`<div class="card ${s}" onclick="openDetail('${c.id}')">
-    <div class="ch"><div class="cn">${c.name}</div><div class="cs">${stLabel(s)}</div></div>
-    <div class="cm">📍 <span>${c.psc?c.psc+' ':''}${c.city||'—'}</span> &nbsp; 📱 <span>${c.phone||'—'}</span><br>
-    🔧 <span>${c.boilerBrand||'—'}</span>${c.model?' · '+c.model:''}${hasMulti(c)?` <span style="color:var(--accent)">+${c.devices.length} ďalšie</span>`:''}<br>
+    <div class="ch"><div class="cn">${esc(c.name)}</div><div class="cs">${stLabel(s)}</div></div>
+    <div class="cm">📍 <span>${esc((c.psc?c.psc+' ':'')+(c.city||'—'))}</span> &nbsp; 📱 <span>${esc(c.phone||'—')}</span><br>
+    🔧 <span>${esc(c.boilerBrand||'—')}</span>${c.model?' · '+esc(c.model):''}${hasMulti(c)?` <span style="color:var(--accent)">+${c.devices.length} ďalšie</span>`:''}<br>
     📅 <span>${fmt(effNext(c))}</span> — <span style="color:${stColor(s)}">${getDaysText(c)}</span></div>
   </div>`;}).join('');
 }
@@ -1664,13 +1754,13 @@ function renderCusts(){
 // ═══════════════════════════════════════════════
 function renderCal(){
   const rows=[];
-  custs.forEach(c=>devList(c).forEach(d=>{ if(d.nextService) rows.push({c,d}); }));
+  custs.forEach(c=>devList(c).forEach(d=>{ if(isISO(d.nextService)) rows.push({c,d}); }));
   rows.sort((a,b)=>new Date(a.d.nextService)-new Date(b.d.nextService));
   const el=document.getElementById('calList');
   if(!rows.length){el.innerHTML='<div class="empty"><div class="empty-ic">📅</div>Žiadne plánované prehliadky</div>';return;}
   const groups={};
   rows.forEach(r=>{
-    const d=new Date(r.d.nextService);
+    const d=parseISO(r.d.nextService);
     const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     const label=d.toLocaleDateString('sk-SK',{month:'long',year:'numeric'});
     if(!groups[key])groups[key]={label,items:[]};
@@ -1679,12 +1769,12 @@ function renderCal(){
   el.innerHTML=Object.values(groups).map(g=>`
     <div class="cal-month">
       <div class="cal-month-hdr">${g.label.toUpperCase()}</div>
-      ${g.items.map(({c,d:dv})=>{const s=stOfDate(dv.nextService);const d=new Date(dv.nextService);return`
+      ${g.items.map(({c,d:dv})=>{const s=stOfDate(dv.nextService);const d=parseISO(dv.nextService);return`
         <div class="cal-row" onclick="openDetail('${c.id}')">
           <div class="cal-day">${d.getDate()}</div>
           <div class="cal-info">
-            <div class="cal-name">${c.name}</div>
-            <div class="cal-sub">${esc(hasMulti(c)?devLabel(dv):(dv.boilerBrand||''))} · ${c.city||''}</div>
+            <div class="cal-name">${esc(c.name)}</div>
+            <div class="cal-sub">${esc(hasMulti(c)?devLabel(dv):(dv.boilerBrand||''))} · ${esc(c.city||'')}</div>
           </div>
           <div class="cal-dot" style="background:${stColor(s)}"></div>
         </div>`}).join('')}
@@ -1718,7 +1808,7 @@ function renderMap(){
         <button class="mp-btn mp-nav" onclick="navToCust('${c.id}')">🧭 Navigovať</button>
         <button class="mp-btn mp-det" onclick="openDetail('${c.id}')">ℹ️ Detail zákazníka</button>
         <div class="mp-row">
-          ${c.phone?`<button class="mp-btn" onclick="window.location.href='tel:${esc(c.phone)}'">📞 Volať</button>`:''}
+          ${c.phone?`<button class="mp-btn" data-tel="${esc(c.phone)}" onclick="window.location.href='tel:'+this.dataset.tel">📞 Volať</button>`:''}
           <button class="mp-btn" onclick="navTo(${c.lat},${c.lng},'waze')">Waze</button>
         </div>`);
     mapMarkers.push(marker);
@@ -1750,6 +1840,14 @@ function openAdd(){
   modal.querySelectorAll('.mtab').forEach((x,i)=>{x.classList.toggle('active',i===0);});
   document.getElementById('custModal').classList.add('open');
 }
+// Nastaví hodnotu výberu; ak v ponuke nie je, doplní ju (inak by sa pri uložení zmazala)
+function setSel(id,val){
+  const s=document.getElementById(id); val=val||'';
+  if(val && ![...s.options].some(o=>o.value===val)){
+    const o=document.createElement('option'); o.value=val; o.textContent=val; s.appendChild(o);
+  }
+  s.value=val;
+}
 function openEdit(id){
   const c=custs.find(x=>x.id===id); if(!c)return;
   editId=id;
@@ -1761,9 +1859,9 @@ function openEdit(id){
   document.getElementById('fCity').value=c.city||'';
   document.getElementById('fAddr').value=c.addr||'';
   document.getElementById('fPsc').value=c.psc||'';
-  document.getElementById('fBrand').value=c.boilerBrand||'';
+  setSel('fBrand',c.boilerBrand);
   document.getElementById('fModel').value=c.model||'';
-  document.getElementById('fType').value=c.boilerType||'';
+  setSel('fType',c.boilerType);
   document.getElementById('fYear').value=c.year||'';
   document.getElementById('fPower').value=c.power||'';
   document.getElementById('fSerial').value=c.serial||'';
@@ -1820,7 +1918,8 @@ async function saveCust(){
   const prev = editId ? JSON.parse(JSON.stringify(existing||{})) : null;
   if(editId){const i=custs.findIndex(x=>x.id===editId);custs[i]=c;}else{custs.unshift(c);}
 
-  if(!(await save({allowLess:true}))){
+  if(!(await save({allowFewerPhotos:true}))){
+    if(lastSaveReloaded) return;   // v pamäti je už aktuálny stav z iného okna
     // uloženie zlyhalo — vráť pôvodný stav a nechaj okno otvorené
     if(editId && prev){ const i=custs.findIndex(x=>x.id===editId); if(i>-1) custs[i]=prev; }
     else { custs=custs.filter(x=>x.id!==c.id); }
@@ -1875,7 +1974,7 @@ function renderPhotoGrid(){
   const g=document.getElementById('photoGrid');
   g.innerHTML=currentEditPhotos.map((src,i)=>`
     <div class="photo-thumb">
-      <img src="${src}" alt="foto ${i+1}" onclick="viewEditPhoto(${i})">
+      <img src="${esc(src)}" alt="foto ${i+1}" onclick="viewEditPhoto(${i})">
       <button class="photo-del" onclick="event.stopPropagation();removePhoto(${i})">✕</button>
     </div>`).join('')+`<div class="photo-add" onclick="document.getElementById('photoInput').click()">📷</div>`;
 }
@@ -1894,12 +1993,12 @@ function openDetail(id){
       <div class="dl">Stav</div>
       <div class="dv">${stDot(s)} ${stLabel(s)} — ${getDaysText(c)}</div>
     </div>
-    <div class="df"><div class="dl">Telefón</div><div class="dv"><a href="tel:${c.phone||''}" style="color:var(--accent);text-decoration:none">${c.phone||'—'}</a></div></div>
-    <div class="df"><div class="dl">Adresa</div><div class="dv">${c.addr||'—'}${c.psc?' '+c.psc:''}${c.city?', '+c.city:''}</div></div>
-    <div class="df"><div class="dl">${hasMulti(c)?'Zariadenie 1'+(c.place?' · '+esc(c.place):''):'Kotol'+(c.place?' · '+esc(c.place):'')}</div><div class="dv">${c.boilerBrand||'—'}${c.model?' · '+c.model:''}</div></div>
-    ${c.boilerType?`<div class="df"><div class="dl">Typ</div><div class="dv">${c.boilerType}</div></div>`:''}
-    ${c.year||c.power?`<div class="df"><div class="dl">Rok / Výkon</div><div class="dv">${c.year||'—'} / ${c.power?c.power+' kW':'—'}</div></div>`:''}
-    ${c.serial?`<div class="df"><div class="dl">Sériové číslo</div><div class="dv" style="font-family:var(--mono)">${c.serial}</div></div>`:''}
+    <div class="df"><div class="dl">Telefón</div><div class="dv"><a href="tel:${esc(c.phone||'')}" style="color:var(--accent);text-decoration:none">${esc(c.phone||'—')}</a></div></div>
+    <div class="df"><div class="dl">Adresa</div><div class="dv">${esc((c.addr||'—')+(c.psc?' '+c.psc:'')+(c.city?', '+c.city:''))}</div></div>
+    <div class="df"><div class="dl">${hasMulti(c)?'Zariadenie 1'+(c.place?' · '+esc(c.place):''):'Kotol'+(c.place?' · '+esc(c.place):'')}</div><div class="dv">${esc((c.boilerBrand||'—')+(c.model?' · '+c.model:''))}</div></div>
+    ${c.boilerType?`<div class="df"><div class="dl">Typ</div><div class="dv">${esc(c.boilerType)}</div></div>`:''}
+    ${c.year||c.power?`<div class="df"><div class="dl">Rok / Výkon</div><div class="dv">${esc(c.year||'—')} / ${c.power?esc(c.power)+' kW':'—'}</div></div>`:''}
+    ${c.serial?`<div class="df"><div class="dl">Sériové číslo</div><div class="dv" style="font-family:var(--mono)">${esc(c.serial)}</div></div>`:''}
     <div class="df"><div class="dl">Posledná prehliadka</div><div class="dv">${fmt(c.lastService)}</div></div>
     <div class="df"><div class="dl">Nasledujúca prehliadka</div><div class="dv">${fmt(c.nextService)}</div></div>
     ${(c.devices||[]).map((d,i)=>{const s=stOfDate(d.nextService);return `<div class="df" style="border-left:3px solid ${stColor(s)}">
@@ -1908,7 +2007,7 @@ function openDetail(id){
       <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6">
         ${d.serial?'S/N '+esc(d.serial)+'<br>':''}${d.year||d.power?'Rok '+esc(d.year||'—')+' · '+(d.power?esc(d.power)+' kW':'—')+'<br>':''}
         Posledná: ${fmt(d.lastService)} · Ďalšia: <span style="color:${stColor(s)}">${fmt(d.nextService)}</span></div></div>`;}).join('')}
-    ${c.notes?`<div class="df"><div class="dl">Poznámky</div><div class="dv" style="font-size:13px;font-weight:400;line-height:1.5">${c.notes.replace(/\n/g,'<br>')}</div></div>`:''}
+    ${c.notes?`<div class="df"><div class="dl">Poznámky</div><div class="dv" style="font-size:13px;font-weight:400;line-height:1.5">${nl2br(c.notes)}</div></div>`:''}
   `;
   // reset detail tabs
   const modal=document.querySelector('#detailModal .modal');
@@ -1925,9 +2024,8 @@ function editFromDetail(){openEdit(detailId);}
 function markServiced(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
   const run=ids=>{
-    const today=new Date().toISOString().split('T')[0];
-    const next=new Date(); next.setMonth(next.getMonth()+(settings.interval||12));
-    const nx=next.toISOString().split('T')[0];
+    const today=todayISO();
+    const nx=addMonthsISO(today, settings.interval||12);
     ids.forEach(id=>setDevDates(c,id,today,nx));
     c.history=c.history||[];
     c.history.unshift({id:uid(),date:today,type:'Ročná prehliadka',desc:ids.length>1?'Servis vykonaný (všetky zariadenia).':'Servis vykonaný.',
@@ -1947,7 +2045,7 @@ function renderDetailPhotos(){
   const ph=(c&&c.photos)||[];
   const g=document.getElementById('detailPhotoGrid');
   if(!ph.length){g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="empty-ic">📸</div>Žiadne fotky</div>';return;}
-  g.innerHTML=ph.map((src,i)=>`<div class="photo-thumb" onclick="viewPhoto(${i})"><img src="${src}" alt="foto ${i+1}"></div>`).join('');
+  g.innerHTML=ph.map((src,i)=>`<div class="photo-thumb" onclick="viewPhoto(${i})"><img src="${esc(src)}" alt="foto ${i+1}"></div>`).join('');
 }
 
 // ═══════════════════════════════════════════════
@@ -2016,20 +2114,20 @@ function renderHistList(){
   el.innerHTML=[...h].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`
     <div class="hist-item">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-        <div class="hist-date">${fmt(e.date)} · ${e.type}${hasMulti(c)?' · '+esc(devShort(c,e.devId)):''}</div>
+        <div class="hist-date">${fmt(e.date)} · ${esc(e.type)}${hasMulti(c)?' · '+esc(devShort(c,e.devId)):''}</div>
         <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">
           <button onclick="editHistEntry('${e.id}')" style="background:var(--surf3);border:none;border-radius:6px;color:var(--accent);padding:3px 8px;font-size:11px;cursor:pointer;">✏️</button>
           <button onclick="delHistEntry('${e.id}')" style="background:rgba(239,35,60,.15);border:none;border-radius:6px;color:var(--danger);padding:3px 8px;font-size:11px;cursor:pointer;">🗑️</button>
         </div>
       </div>
-      <div class="hist-work">${e.desc||'—'}</div>
-      <div class="hist-price">Práca: ${e.labor||0}€ · Diely: ${e.parts||0}€ · Celkom: ${((parseFloat(e.labor)||0)+(parseFloat(e.parts)||0)).toFixed(2)}€</div>
-      ${e.tech?`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">Technik: ${e.tech}</div>`:''}
+      <div class="hist-work">${nl2br(e.desc||'—')}</div>
+      <div class="hist-price">Práca: ${esc(e.labor||0)}€ · Diely: ${esc(e.parts||0)}€ · Celkom: ${((parseFloat(e.labor)||0)+(parseFloat(e.parts)||0)).toFixed(2)}€</div>
+      ${e.tech?`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">Technik: ${esc(e.tech)}</div>`:''}
     </div>`).join('');
 }
 function openAddHistory(){
   editHistId = null;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   document.getElementById('hDate').value=today;
   document.getElementById('hType').value='Ročná prehliadka';
   { const c=custs.find(x=>x.id===detailId); if(c) fillDevSelect('hDev','hDevWrap',c,dueDev(c).id); }
@@ -2070,9 +2168,7 @@ function saveHistory(){
   // Posunúť dátum ďalšej prehliadky LEN pri ročnej prehliadke alebo uvedení do prevádzky
   const typesWithCountdown = ['Ročná prehliadka','Uvedenie do prevádzky'];
   if(typesWithCountdown.includes(type) && date){
-    const next = new Date(date);
-    next.setMonth(next.getMonth() + (settings.interval||12));
-    setDevDates(c, histDevVal(), date, next.toISOString().split('T')[0]);
+    setDevDates(c, histDevVal(), date, addMonthsISO(date, settings.interval||12));
   }
 
   save(); closeHM(); renderHistList(); renderCusts(); renderDash();
@@ -2110,9 +2206,9 @@ function renderInvItems(){
   const el=document.getElementById('invItems');
   el.innerHTML=invItems.map((item,i)=>`
     <div class="inv-item">
-      <input class="inv-desc" placeholder="Popis položky" value="${item.desc}" oninput="invItems[${i}].desc=this.value">
-      <input class="inv-qty" type="number" min="1" placeholder="Ks" value="${item.qty}" oninput="invItems[${i}].qty=parseFloat(this.value)||1;calcInv()">
-      <input class="inv-price" type="number" min="0" step="0.01" placeholder="€" value="${item.price}" oninput="invItems[${i}].price=parseFloat(this.value)||0;calcInv()">
+      <input class="inv-desc" placeholder="Popis položky" value="${esc(item.desc)}" oninput="invItems[${i}].desc=this.value">
+      <input class="inv-qty" type="number" min="1" placeholder="Ks" value="${esc(item.qty)}" oninput="invItems[${i}].qty=parseFloat(this.value)||1;calcInv()">
+      <input class="inv-price" type="number" min="0" step="0.01" placeholder="€" value="${esc(item.price)}" oninput="invItems[${i}].price=parseFloat(this.value)||0;calcInv()">
       <div class="inv-total">${((item.qty||1)*(item.price||0)).toFixed(2)}€</div>
       <button class="inv-del" onclick="invItems.splice(${i},1);renderInvItems()">✕</button>
     </div>`).join('');
@@ -2180,16 +2276,31 @@ const ZAVER_TXT = {
 };
 let protoDraft = null, protoEditId = null;
 
-function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
 
+// Najvyššie použité poradové číslo: z nastavení aj zo všetkých protokolov v databáze
+// (po obnove zálohy z iného zariadenia tak číslovanie pokračuje a nezačne odznova).
+function maxProtoSeq(){
+  let m=parseInt(settings.protoSeq)||0;
+  custs.forEach(c=>(c.protocols||[]).forEach(p=>{
+    const s=parseInt((String(p.cislo||'').match(/^SP-\d{4}-(\d+)$/)||[])[1]);
+    if(s>m) m=s;
+  }));
+  return m;
+}
+function findProtoByNum(cislo, exceptId){
+  cislo=String(cislo||'').trim(); if(!cislo) return null;
+  for(const c of custs) for(const p of (c.protocols||[])) if(p.id!==exceptId && String(p.cislo||'').trim()===cislo) return {c,p};
+  return null;
+}
 function nextProtoNum(){
   const y=new Date().getFullYear();
-  const seq=(parseInt(settings.protoSeq)||0)+1;
+  const seq=maxProtoSeq()+1;
   return 'SP-'+y+'-'+String(seq).padStart(4,'0');
 }
 function emptyProto(){
-  return {id:uid(),cislo:nextProtoNum(),date:new Date().toISOString().split('T')[0],
+  return {id:uid(),cislo:nextProtoNum(),date:todayISO(),
     from:'',to:'',hours:'',checks:PROTO_UKONY.map(()=>({s:'',n:''})),mer:{},
     tlakSys:'',tlakExp:'',tesnost:'Vyhovuje – bez úniku',diely:[],zavady:'',
     zaver:'sposobile',next:'',km:'',tech:settings.name||'',preb:''};
@@ -2205,8 +2316,7 @@ function openProtocol(pid){
   } else {
     protoDraft=emptyProto(); protoEditId=null;
     protoDraft.preb=c.name||'';
-    const n=new Date(); n.setMonth(n.getMonth()+(settings.interval||12));
-    protoDraft.next=n.toISOString().split('T')[0];
+    protoDraft.next=addMonthsISO(todayISO(), settings.interval||12);
     document.getElementById('protoTitle').textContent='Nový servisný protokol';
   }
   const p=protoDraft;
@@ -2301,6 +2411,8 @@ function saveProtocol(andPrint){
   p.tech=document.getElementById('pTech').value;
   p.preb=document.getElementById('pPreb').value;
   p.devId=document.getElementById('pDev').value||'main';
+  const dup=findProtoByNum(p.cislo, p.id);
+  if(dup && !confirm('Protokol s číslom '+p.cislo+' už existuje (zákazník '+dup.c.name+', '+fmt(dup.p.date)+').\n\nUložiť aj tak s rovnakým číslom?')) return;
 
   const isNew=!protoEditId;
   if(isNew){
@@ -2407,7 +2519,7 @@ function buildProtocolHTML(c,p,blank){
    <div class="sp-page">
     <div class="head">
       <div class="brand">
-        <div class="logo">${logo?`<img src="${logo}" alt="">`:''}</div>
+        <div class="logo">${logo?`<img src="${esc(logo)}" alt="">`:''}</div>
         <div class="firma">
           <b>${esc(S.firma||'—')}</b>
           ${esc(S.addr||'')}<br>
@@ -2491,7 +2603,7 @@ function buildProtocolHTML(c,p,blank){
       zariadenie mu bolo odovzdané v prevádzkyschopnom stave (ak nie je v bode 7 uvedené inak) a bol oboznámený so zistenými
       závadami, odporúčaniami a s bezpečnou obsluhou zariadenia.</div>
       <div class="sign${!blank&&S.stamp?' has-stamp':''}">
-        <div class="s">${!blank&&S.stamp?`<img class="stamp" src="${S.stamp}" alt="">`:''}<div class="line">Podpis servisného technika a pečiatka</div>
+        <div class="s">${!blank&&S.stamp?`<img class="stamp" src="${esc(S.stamp)}" alt="">`:''}<div class="line">Podpis servisného technika a pečiatka</div>
           <div class="who">${esc(p.tech||S.name||'')}</div></div>
         <div class="s"><div class="line">Podpis zákazníka / preberajúceho</div>
           <div class="who">${esc(p.preb||c.name||'')}</div></div>
@@ -2527,24 +2639,24 @@ function printInvoice(){
           <p style="color:#666;margin:4px 0 0">${invNum}</p>
         </div>
         <div style="text-align:right;font-size:12px;line-height:1.7">
-          <strong>${settings.firma||'ServisKotlov'}</strong><br>
-          ${settings.addr||''}<br>
-          ${settings.phone||''}<br>
+          <strong>${esc(settings.firma||'ServisKotlov')}</strong><br>
+          ${esc(settings.addr||'')}<br>
+          ${esc(settings.phone||'')}<br>
           ${taxIds||'IČO: —'}
         </div>
       </div>
       <div style="display:flex;gap:20px;margin-bottom:24px;">
         <div style="flex:1;background:#f8f9fa;padding:12px;border-radius:6px;">
           <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Dodávateľ</div>
-          <strong>${settings.firma||settings.name||'—'}</strong><br>
-          ${settings.addr||''}<br>${settings.phone||''}
+          <strong>${esc(settings.firma||settings.name||'—')}</strong><br>
+          ${esc(settings.addr||'')}<br>${esc(settings.phone||'')}
           ${taxIds?'<div style="margin-top:4px;font-size:11px;color:#555">'+taxIds.replace(/<br>/g,' · ')+'</div>':''}
           ${payer?'':'<div style="margin-top:4px;font-size:11px;color:#555">Nie je platiteľ DPH</div>'}
         </div>
         <div style="flex:1;background:#f8f9fa;padding:12px;border-radius:6px;">
           <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Odberateľ</div>
-          <strong>${c.name}</strong><br>
-          ${c.addr||''}, ${c.city||''}<br>${c.phone||''}
+          <strong>${esc(c.name)}</strong><br>
+          ${esc([c.addr,[c.psc,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', '))}<br>${esc(c.phone||'')}
         </div>
       </div>
       <div style="margin-bottom:6px;font-size:12px;color:#666">Dátum vystavenia: ${new Date().toLocaleDateString('sk-SK')}</div>
@@ -2559,9 +2671,9 @@ function printInvoice(){
         </thead>
         <tbody>
           ${invItems.map((item,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">
-            <td style="padding:7px 8px">${item.desc||'—'}</td>
-            <td style="padding:7px 8px;text-align:center">${item.qty||1}</td>
-            <td style="padding:7px 8px;text-align:right">${(item.price||0).toFixed(2)} €</td>
+            <td style="padding:7px 8px">${esc(item.desc||'—')}</td>
+            <td style="padding:7px 8px;text-align:center">${esc(item.qty||1)}</td>
+            <td style="padding:7px 8px;text-align:right">${(parseFloat(item.price)||0).toFixed(2)} €</td>
             <td style="padding:7px 8px;text-align:right">${((item.qty||1)*(item.price||0)).toFixed(2)} €</td>
           </tr>`).join('')}
         </tbody>
@@ -2603,7 +2715,7 @@ function toggleVatFields(){
 // ═══════════════════════════════════════════════
 function renderStampPrev(){
   const el=document.getElementById('stampPrev'); if(!el) return;
-  el.innerHTML=settings.stamp?`<img src="${settings.stamp}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-family:var(--mono);font-size:9px;color:#888">bez pečiatky</span>';
+  el.innerHTML=settings.stamp?`<img src="${esc(settings.stamp)}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-family:var(--mono);font-size:9px;color:#888">bez pečiatky</span>';
 }
 // Zmenší obrázok, biele/svetlé pozadie spraví priehľadné, uloží ako PNG
 function processStampImage(dataURL){
@@ -2794,6 +2906,7 @@ function loadSett(){
   updateStorageUI();
   updateFolderUI();
   loadDriveSettings();
+  updateUndoUI();
 }
 function saveSettings(){
   settings.name=document.getElementById('sName').value;
@@ -2816,7 +2929,7 @@ function saveSettings(){
 function renderLogoPrev(){
   const el=document.getElementById('logoPrev'); if(!el)return;
   const src=settings.logo||DEFAULT_LOGO;
-  el.innerHTML=src?`<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-family:var(--mono);font-size:9px;color:#888">bez loga</span>';
+  el.innerHTML=src?`<img src="${esc(src)}" style="max-width:100%;max-height:100%;object-fit:contain">`:'<span style="font-family:var(--mono);font-size:9px;color:#888">bez loga</span>';
 }
 function uploadLogo(e){
   const f=e.target.files&&e.target.files[0]; if(!f)return;
@@ -2969,7 +3082,7 @@ function exportExcel(){
     'Kotol':c.boilerBrand||'','Model':c.model||'','Typ':c.boilerType||'',
     'Rok inst.':c.year||'','Výkon (kW)':c.power||'','S/N':c.serial||'',
     'Posledná prehliadka':fmt(c.lastService),'Nasledujúca prehliadka':fmt(c.nextService),
-    'Stav':stLabel(getSt(c)),'Dni do prehliadky':effNext(c)?Math.ceil((new Date(effNext(c))-new Date())/86400000):'',
+    'Stav':stLabel(getSt(c)),'Dni do prehliadky':effNext(c)?daysUntil(effNext(c)):'',
     'Ďalšie zariadenia':(c.devices||[]).map(d=>devLabel(d)+(d.serial?' S/N '+d.serial:'')+(d.nextService?' ďalšia '+fmt(d.nextService):'')).join('; '),
     'GPS Lat':c.lat||'','GPS Lng':c.lng||'','Poznámky':c.notes||'',
     'Počet servisov':(c.history||[]).length
@@ -2985,21 +3098,138 @@ function exportExcel(){
   custs.forEach(c=>(c.history||[]).forEach(h=>{hRows.push({'Zákazník':c.name,'Dátum':fmt(h.date),'Typ':h.type,'Popis':h.desc,'Práca (€)':h.labor||0,'Diely (€)':h.parts||0,'Celkom (€)':((parseFloat(h.labor)||0)+(parseFloat(h.parts)||0)),'Technik':h.tech||''});}));
   if(hRows.length){const ws2=XLSX.utils.json_to_sheet(hRows);XLSX.utils.book_append_sheet(wb,ws2,'História servisov');}
 
-  XLSX.writeFile(wb,'ServisKotlov-'+new Date().toISOString().split('T')[0]+'.xlsx');
+  XLSX.writeFile(wb,'ServisKotlov-'+todayISO()+'.xlsx');
+}
+
+
+// ═══════════════════════════════════════════════
+// OBNOVA ZO ZÁLOHY — spoločná pre Import JSON, priečinok aj Google Drive
+// Kontrola obsahu, potvrdenie s počtami, odloženie pôvodného stavu.
+// ═══════════════════════════════════════════════
+const IMG_RE=/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+\/=]+$/i;
+function safeId(x){ return (typeof x==='string' && /^[\w-]{1,40}$/.test(x)) ? x : uid(); }
+function normalizeCusts(arr){
+  const seen=new Set();
+  const objs=a=>(Array.isArray(a)?a:[]).filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+  return objs(arr).map(c=>{
+    const o={...c};
+    o.id=safeId(o.id); if(seen.has(o.id)) o.id=uid(); seen.add(o.id);
+    o.name=String(o.name==null?'':o.name);
+    o.photos=(Array.isArray(o.photos)?o.photos:[]).filter(s=>typeof s==='string'&&IMG_RE.test(s));
+    o.history=objs(o.history).map(h=>({...h,id:safeId(h.id)}));
+    o.invoice=objs(o.invoice).map(i=>({desc:String(i.desc==null?'':i.desc),qty:parseFloat(i.qty)||1,price:parseFloat(i.price)||0}));
+    if(o.protocols!==undefined) o.protocols=objs(o.protocols).map(p=>({...p,id:safeId(p.id)}));
+    if(o.devices!==undefined) o.devices=objs(o.devices).map(d=>({...d,id:safeId(d.id)}));
+    o.lat=parseFloat(o.lat)||null; o.lng=parseFloat(o.lng)||null;
+    return o;
+  });
+}
+// Podpis fotky: podľa neho sa pri obnove z Drive (kde sú fotky zmenšené)
+// vráti pôvodná fotka v plnej kvalite, ak ju toto zariadenie ešte má.
+function photoSig(s){ s=String(s||''); return s.length+':'+s.slice(-40); }
+function restoreLocalPhotos(list){
+  const local=new Map(); custs.forEach(c=>(c.photos||[]).forEach(p=>local.set(photoSig(p),p)));
+  list.forEach(o=>{
+    if(Array.isArray(o.photoSig)) o.photos=o.photos.map((p,i)=>local.get(o.photoSig[i])||p);
+    delete o.photoSig;
+  });
+}
+function mergeSettings(s){
+  const n={...s};
+  ['logo','stamp'].forEach(k=>{ if(n[k] && !(typeof n[k]==='string'&&IMG_RE.test(n[k]))) n[k]=''; });
+  if(settings.driveClientId) n.driveClientId=settings.driveClientId;       // Client ID patrí zariadeniu
+  n.protoSeq=Math.max(parseInt(settings.protoSeq)||0, parseInt(n.protoSeq)||0);  // číslovanie nikdy nejde späť
+  settings=n;
+  try{ saveSett(); }catch(e){ console.error(e); }
+}
+async function applyBackup(d, label){
+  if(!d || typeof d!=='object' || !Array.isArray(d.custs)){
+    alert('❌ Toto nie je záloha aplikácie ServisKotlov (chýba zoznam zákazníkov).\n\nNič sa nezmenilo.');
+    return false;
+  }
+  let list=normalizeCusts(d.custs);
+  if(d.custs.length && !list.length){
+    alert('❌ Záloha neobsahuje čitateľné záznamy zákazníkov.\n\nNič sa nezmenilo.');
+    return false;
+  }
+  if(typeof checkImportLimit==='function'){ list=checkImportLimit(list); if(!list) return false; }
+  restoreLocalPhotos(list);
+  const when=d.ts?new Date(d.ts).toLocaleString('sk-SK'):'dátum neznámy';
+  if(!confirm('Nahradiť dáta v tomto zariadení zálohou?\n\n'
+    + 'TERAZ: '+custs.length+' zákazníkov, '+countPhotos(custs)+' fotiek\n'
+    + 'ZÁLOHA ('+label+', '+when+'): '+list.length+' zákazníkov, '+countPhotos(list)+' fotiek\n\n'
+    + 'Pôvodný stav sa odloží — dá sa vrátiť v Nastaveniach.')) return false;
+  const prev=custs;
+  if(DB && storageReady && !storageFailed && prev.length){
+    try{ await idbSet('custs_prev',{ts:Date.now(),custs:prev}); }catch(e){ console.warn('custs_prev',e); }
+  }
+  custs=list;
+  if(!(await save({allowLess:true, allowEmpty:true, force:true}))){ custs=prev; renderCusts(); renderDash(); return false; }
+  storageWiped=false;
+  if(d.settings && typeof d.settings==='object' && !Array.isArray(d.settings)) mergeSettings(d.settings);
+  renderCusts(); renderDash(); updateUndoUI();
+  return true;
+}
+async function updateUndoUI(){
+  const b=document.getElementById('undoRestoreBtn'); if(!b) return;
+  let p=null; try{ await openDB(); p=await idbGet('custs_prev'); }catch(e){}
+  if(p && Array.isArray(p.custs) && p.custs.length){
+    b.style.display='block';
+    b.textContent='↩️ Vrátiť dáta spred poslednej obnovy ('+p.custs.length+' zákazníkov, '+new Date(p.ts).toLocaleDateString('sk-SK')+')';
+  } else b.style.display='none';
+}
+async function restorePrevData(){
+  let p=null; try{ p=await idbGet('custs_prev'); }catch(e){}
+  if(!p || !Array.isArray(p.custs)){ alert('Odložený stav sa nenašiel.'); return; }
+  if(!confirm('Vrátiť dáta do stavu pred poslednou obnovou / importom?\n\n'
+    + 'TERAZ: '+custs.length+' zákazníkov\nODLOŽENÉ ('+new Date(p.ts).toLocaleString('sk-SK')+'): '+p.custs.length+' zákazníkov\n\n'
+    + 'Súčasný stav sa odloží namiesto neho.')) return;
+  const cur=custs;
+  custs=p.custs;
+  if(!(await save({allowLess:true, allowEmpty:true, force:true}))){ custs=cur; return; }
+  try{ await idbSet('custs_prev',{ts:Date.now(),custs:cur}); }catch(e){}
+  storageWiped=false;
+  renderCusts(); renderDash(); updateUndoUI();
+  showToast('↩️ Dáta vrátené');
+}
+
+// ── Pripomienka zálohy na Prehľade ─────────────────────
+function lastBackupTs(){
+  return Math.max(0,...['sk2_driveLastBackup','sk2_folderLastBackup','sk2_exportLast'].map(k=>parseInt(localStorage.getItem(k)||'0')||0));
+}
+function renderBackupBanner(){
+  const el=document.getElementById('backupBanner'); if(!el) return;
+  const real=custs.filter(c=>!c.demo).length;
+  if(!storageReady || storageFailed || !real){ el.innerHTML=''; return; }
+  const ts=lastBackupTs(), days=ts?Math.floor((Date.now()-ts)/86400000):null;
+  if(days!==null && days<7){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="ai ${days===null||days>=30?'ov':'w'}" onclick="pg('settings')"><div class="ai-ic">💾</div><div class="ai-tx">
+    <div class="ai-nm">${days===null?'Dáta ešte neboli zálohované':'Posledná záloha pred '+days+' dňami'}</div>
+    <div class="ai-ds">Zálohuj v Nastaveniach — Drive, priečinok alebo Export JSON</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;
 }
 
 // ═══════════════════════════════════════════════
 // JSON EXPORT / IMPORT
 // ═══════════════════════════════════════════════
 function exportJSON(){
-  const blob=new Blob([JSON.stringify({custs,settings},null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({custs,settings,ts:Date.now(),version:3},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='servis-kotlov-zaloha-'+new Date().toISOString().split('T')[0]+'.json'; a.click();
+  a.download='servis-kotlov-zaloha-'+todayISO()+'.json'; a.click();
+  try{ localStorage.setItem('sk2_exportLast', String(Date.now())); }catch(e){}
+  renderBackupBanner();
 }
 function importJSON(e){
   const f=e.target.files[0]; if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.custs){const l=checkImportLimit(d.custs);if(!l)return;custs=l;save({allowLess:true, allowEmpty:true});storageWiped=false;}if(d.settings){settings=d.settings;saveSett();}renderCusts();renderDash();alert('✅ Import úspešný: '+custs.length+' zákazníkov');}catch{alert('Chyba importu');}};
+  r.onload=async ev=>{
+    let d;
+    try{ d=JSON.parse(ev.target.result); }
+    catch(err){ alert('❌ Súbor sa nedá prečítať — nie je to platná záloha (JSON).\n\nNič sa nezmenilo.'); return; }
+    if(await applyBackup(d,'súbor '+f.name)){
+      loadSett();
+      alert('✅ Import úspešný: '+custs.length+' zákazníkov');
+    }
+  };
   r.readAsText(f); e.target.value='';
 }
 async function clearAll(){
@@ -3182,6 +3412,17 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FILE_NAME = 'ServisKotlov-zaloha.json';
 let driveToken = null;
 let driveFileId = localStorage.getItem('sk2_driveFileId') || null;
+let driveFileMeta = null;
+// Token platí asi hodinu; po vypršaní sa treba pripojiť znova.
+function driveTokenOK(){
+  if(!driveToken) return false;
+  const exp=parseInt(localStorage.getItem('sk2_driveTokenExpiry')||'0');
+  if(exp && Date.now()>exp-30000){ driveToken=null; updateDriveUI(); return false; }
+  return true;
+}
+// Toto zariadenie už do zálohy na Drive zapisovalo alebo z nej obnovovalo.
+// Kým to tak nie je, cudziu zálohu neprepíše bez výslovného súhlasu a nikdy nie automaticky.
+function driveLinked(){ return localStorage.getItem('sk2_driveLinked')==='1' || !!localStorage.getItem('sk2_driveLastBackup'); }
 
 // ═══════════════════════════════════════════════
 // ZÁLOHA DO PRIEČINKA V TELEFÓNE / POČÍTAČI
@@ -3219,6 +3460,11 @@ async function pickBackupFolder(){
 }
 async function backupToFolder(silent){
   if(!FOLDER_SUPPORTED) return false;
+  if(!storageReady || storageWiped || storageFailed){ if(!silent) alert('Dáta nie sú načítané — zálohu nerobím, aby som neprepísal tú existujúcu.'); return false; }
+  if(!custs.length){
+    if(silent) return false;
+    if(!confirm('V aplikácii nie sú žiadni zákazníci.\nNaozaj prepísať zálohu v priečinku prázdnou?')) return false;
+  }
   if(!folderHandle) await loadFolderHandle();
   if(!folderHandle){ if(!silent) alert('Najprv vyber priečinok.'); return false; }
   if(!(await folderPermission(folderHandle, true))){
@@ -3231,7 +3477,7 @@ async function backupToFolder(silent){
     const w  = await fh.createWritable();
     await w.write(data); await w.close();
     localStorage.setItem('sk2_folderLastBackup', String(Date.now()));
-    updateFolderUI();
+    updateFolderUI(); renderBackupBanner();
     if(!silent) showToast('📁 Záloha uložená do priečinka ('+fmtBytes(data.length)+')');
     return true;
   }catch(e){
@@ -3244,15 +3490,15 @@ async function restoreFromFolder(){
   if(!folderHandle) await loadFolderHandle();
   if(!folderHandle){ alert('Najprv vyber priečinok.'); return; }
   if(!(await folderPermission(folderHandle, true))){ alert('Prístup k priečinku nebol povolený.'); return; }
-  if(!confirm('Obnoviť dáta zo zálohy v priečinku?\nAktuálne dáta budú prepísané.')) return;
   try{
     const fh = await folderHandle.getFileHandle(FOLDER_FILE);
     const txt = await (await fh.getFile()).text();
-    const d = JSON.parse(txt);
-    if(d.custs){ const l=checkImportLimit(d.custs); if(!l) return; custs = l; await save(true); storageWiped=false; }
-    if(d.settings){ const cid=settings.driveClientId; settings=d.settings; if(cid)settings.driveClientId=cid; saveSett(); }
-    renderCusts(); renderDash(); loadSett();
-    alert('✅ Obnovené: '+custs.length+' zákazníkov\nZáloha z: '+(d.ts?new Date(d.ts).toLocaleString('sk-SK'):'—'));
+    let d;
+    try{ d = JSON.parse(txt); }catch(err){ alert('❌ Súbor zálohy v priečinku je poškodený.\n\nNič sa nezmenilo.'); return; }
+    if(await applyBackup(d,'priečinok')){
+      loadSett();
+      alert('✅ Obnovené: '+custs.length+' zákazníkov\nZáloha z: '+(d.ts?new Date(d.ts).toLocaleString('sk-SK'):'—'));
+    }
   }catch(e){ alert('Obnova zlyhala: '+e.message); }
 }
 async function forgetFolder(){
@@ -3273,7 +3519,7 @@ async function updateFolderUI(){
   if(!folderHandle) await loadFolderHandle();
   const last=localStorage.getItem('sk2_folderLastBackup');
   box.innerHTML = folderHandle
-    ? `<div style="font-family:var(--mono);font-size:11px;color:var(--accent3);margin-bottom:8px">📁 Priečinok: ${folderHandle.name||'nastavený'}</div>
+    ? `<div style="font-family:var(--mono);font-size:11px;color:var(--accent3);margin-bottom:8px">📁 Priečinok: ${esc(folderHandle.name||'nastavený')}</div>
        ${last?`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px">⏱ Posledná záloha: ${new Date(parseInt(last)).toLocaleString('sk-SK')}</div>`:''}
        <button class="btn btn-o" onclick="backupToFolder()">💾 Zálohovať do priečinka</button>
        <button class="btn btn-s" style="margin-top:6px" onclick="restoreFromFolder()">⬇️ Obnoviť z priečinka</button>
@@ -3294,7 +3540,7 @@ function loadDriveSettings(){
 }
 
 function updateDriveUI(){
-  const connected = !!driveToken;
+  const connected = driveTokenOK();
   const hasCid = !!(settings.driveClientId||document.getElementById('driveClientId')?.value);
   const dot = document.getElementById('driveStatusDot');
   const txt = document.getElementById('driveStatusText');
@@ -3304,7 +3550,8 @@ function updateDriveUI(){
   if(connected){
     dot.style.background = 'var(--accent3)';
     txt.textContent = '✅ Pripojené k Google Drive';
-    sub.textContent = 'Zálohovanie aktívne';
+    const exp=parseInt(localStorage.getItem('sk2_driveTokenExpiry')||'0');
+    sub.textContent = 'Pripojenie platí'+(exp?' do '+new Date(exp).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):' asi hodinu')+' — potom sa pripoj znova';
     document.getElementById('driveConnectBtn').style.display = 'none';
     document.getElementById('driveBackupBtn').style.display = 'block';
     document.getElementById('driveRestoreBtn').style.display = 'block';
@@ -3340,11 +3587,11 @@ function renderDriveDiag(){
       Zálohovanie cez <b style="color:var(--text)">Export JSON</b> funguje aj takto.`
    : `<div style="color:var(--accent);font-weight:600;margin-bottom:6px">Adresy do Google Cloud Console</div>
       <div>Authorised JavaScript origin:</div>
-      <div style="color:var(--accent3);word-break:break-all;margin-bottom:6px">${origin}</div>
+      <div style="color:var(--accent3);word-break:break-all;margin-bottom:6px">${esc(origin)}</div>
       <div>Authorised redirect URI:</div>
-      <div style="color:var(--accent3);word-break:break-all">${redirect}</div>
+      <div style="color:var(--accent3);word-break:break-all">${esc(redirect)}</div>
       <button class="btn btn-s" style="margin-top:8px;padding:7px;font-size:11px"
-        onclick="navigator.clipboard.writeText('${redirect}').then(()=>showToast('✅ Skopírované'))">📋 Kopírovať redirect URI</button>`;
+        data-v="${esc(redirect)}" onclick="navigator.clipboard.writeText(this.dataset.v).then(()=>showToast('✅ Skopírované'))">📋 Kopírovať redirect URI</button>`;
 }
 
 function driveConnect(){
@@ -3360,6 +3607,9 @@ function driveConnect(){
   }
   settings.driveClientId = cid;
   saveSett();
+  // Náhodná značka: po návrate z Google prijmeme prihlásenie len vtedy, ak sme oň žiadali my.
+  const oauthState = 'drive_'+uid()+uid();
+  localStorage.setItem('sk2_oauthState', JSON.stringify({s:oauthState, t:Date.now()}));
 
   // Redirect flow — funguje na iOS Safari, Android Chrome aj desktop
   const redirectUri = window.location.origin + window.location.pathname;
@@ -3369,26 +3619,35 @@ function driveConnect(){
     response_type: 'token',
     scope: DRIVE_SCOPE,
     include_granted_scopes: 'true',
-    state: 'drive_auth'
+    state: oauthState
   });
   window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 }
 
 function handleOAuthRedirect(){
   const hash = window.location.hash;
-  if(!hash) return;
+  if(!hash || hash.indexOf('access_token')===-1) return;
   const params = new URLSearchParams(hash.substring(1));
   const token = params.get('access_token');
   const state = params.get('state');
-  if(token && state === 'drive_auth'){
-    driveToken = token;
-    const expiresIn = parseInt(params.get('expires_in') || '3600');
-    localStorage.setItem('sk2_driveTokenExpiry', String(Date.now() + expiresIn * 1000));
-    history.replaceState(null, '', window.location.pathname);
-    updateDriveUI();
-    pg('settings');
-    setTimeout(() => alert('\u2705 Google Drive pripojený!\nMôžeš teraz zálohovať databázu.'), 400);
+  history.replaceState(null, '', window.location.pathname);      // token nenechávame v adrese
+  let want=null; try{ want=JSON.parse(localStorage.getItem('sk2_oauthState')||'null'); }catch(e){}
+  localStorage.removeItem('sk2_oauthState');
+  const ok = token && want && want.s && state===want.s && (Date.now()-want.t) < 15*60*1000;
+  if(!ok){
+    setTimeout(() => alert('⚠️ Prihlásenie do Google Drive bolo odmietnuté.\n\n'
+      + 'Aplikácia oň v tejto chvíli nežiadala (alebo prihlasovanie trvalo príliš dlho). '
+      + 'Ak si sa chcel pripojiť, skús to znova tlačidlom v Nastaveniach.'), 400);
+    return;
   }
+  driveToken = token;
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
+  localStorage.setItem('sk2_driveTokenExpiry', String(Date.now() + expiresIn * 1000));
+  updateDriveUI();
+  pg('settings');
+  setTimeout(() => alert('✅ Google Drive pripojený!\n\n'
+    + (driveLinked() ? 'Môžeš zálohovať alebo obnoviť databázu.'
+       : 'Ak už na Drive máš zálohu z iného zariadenia, zvoľ „Obnoviť zálohu z Google Drive“.\nZálohovať odtiaľto znamená prepísať ju dátami z tohto zariadenia.')), 400);
 }
 
 function driveDisconnect(){
@@ -3407,7 +3666,9 @@ async function driveFindFile(){
   );
   if(!resp.ok) throw new Error('HTTP ' + resp.status);
   const data = await resp.json();
+  driveFileMeta = null;
   if(data.files && data.files.length > 0){
+    driveFileMeta = data.files[0];
     driveFileId = data.files[0].id;
     localStorage.setItem('sk2_driveFileId', driveFileId);
     return driveFileId;
@@ -3435,26 +3696,46 @@ function compressPhoto(src, maxPx, quality){
   });
 }
 
-async function driveBackup(){
-  if(!driveToken){ alert('Najprv sa prihlás do Google Drive'); return; }
+async function driveBackup(auto){
+  auto = auto===true;
+  if(!driveTokenOK()){ if(!auto) alert('Prihlásenie do Google Drive vypršalo.\nPripoj sa znova.'); return; }
+  if(!storageReady || storageWiped || storageFailed){
+    if(!auto) alert('Dáta nie sú načítané — zálohu nerobím, aby som neprepísal tú existujúcu.');
+    return;
+  }
+  const linked = driveLinked();
+  const lastCount = parseInt(localStorage.getItem('sk2_driveLastCount')||'0');
+  const shrunk = lastCount>=4 && custs.length < lastCount*0.5;
+  // Automatická záloha nikdy neprepíše zálohu, ktorú toto zariadenie nepozná,
+  // ani ju nenahradí prázdnou či výrazne menšou databázou.
+  if(auto && (!linked || !custs.length || shrunk)) return;
+  if(!auto && !custs.length && !confirm('V aplikácii nie sú žiadni zákazníci.\nNaozaj prepísať zálohu na Google Drive prázdnou?')) return;
+  if(!auto && shrunk && !confirm('Pri poslednej zálohe bolo '+lastCount+' zákazníkov, teraz ich je '+custs.length+'.\n\nNaozaj prepísať zálohu na Google Drive?')) return;
+
   const btn = document.getElementById('driveBackupBtn');
+  const resetBtn = ()=>{ btn.textContent='☁️ Zálohovať teraz do Google Drive'; btn.disabled=false; };
   btn.textContent = '⏳ Zálohujem...';
   btn.disabled = true;
 
   try {
-    // Komprimovať fotky pred zálohou (max 800px, 60% kvalita)
-    const custsForBackup = await Promise.all(custs.map(async c => {
-      const photos = await Promise.all((c.photos||[]).map(src => compressPhoto(src, 800, 0.6)));
-      return {...c, photos};
-    }));
-    const data = JSON.stringify({custs: custsForBackup, settings, ts: Date.now(), version: 2}, null, 2);
-    const sizeKB = Math.round(data.length / 1024);
-    console.log('Backup size:', sizeKB, 'KB');
-
-    const blob = new Blob([data], {type:'application/json'});
-
     // Vždy najprv vyhľadaj súbor podľa mena (synchronizácia PC <-> mobil)
     const existingId = await driveFindFile();
+    if(existingId && !linked){
+      const when = driveFileMeta && driveFileMeta.modifiedTime ? new Date(driveFileMeta.modifiedTime).toLocaleString('sk-SK') : 'dátum neznámy';
+      if(!confirm('Na Google Drive už je záloha ('+when+').\n'
+        + 'Toto zariadenie do nej ešte nezálohovalo ani z nej neobnovovalo.\n\n'
+        + 'PREPÍSAŤ ju dátami z tohto zariadenia ('+custs.length+' zákazníkov)?\n\n'
+        + 'Ak chceš naopak dáta zo zálohy, zvoľ Zrušiť a použi „Obnoviť zálohu z Google Drive“.')){ resetBtn(); return; }
+    }
+
+    // Komprimovať fotky pred zálohou (max 800px, 60% kvalita); podpis pôvodnej fotky
+    // umožní pri obnove na tomto zariadení ponechať fotku v plnej kvalite.
+    const custsForBackup = await Promise.all(custs.map(async c => {
+      const photos = await Promise.all((c.photos||[]).map(src => compressPhoto(src, 800, 0.6)));
+      return {...c, photos, photoSig:(c.photos||[]).map(photoSig)};
+    }));
+    const data = JSON.stringify({custs: custsForBackup, settings, ts: Date.now(), version: 3}, null, 2);
+    const blob = new Blob([data], {type:'application/json'});
 
     let resp;
     if(existingId){
@@ -3472,16 +3753,20 @@ async function driveBackup(){
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
         { method:'POST', headers:{'Authorization':'Bearer '+driveToken}, body: form }
       );
-      const json = await resp.json();
-      driveFileId = json.id;
-      localStorage.setItem('sk2_driveFileId', driveFileId);
+      if(resp.ok){
+        const json = await resp.json();
+        driveFileId = json.id;
+        localStorage.setItem('sk2_driveFileId', driveFileId);
+      }
     }
 
     if(resp && resp.ok){
       localStorage.setItem('sk2_driveLastBackup', String(Date.now()));
+      localStorage.setItem('sk2_driveLinked', '1');
+      localStorage.setItem('sk2_driveLastCount', String(custs.length));
       btn.textContent = '✅ Zálohované!';
-      updateDriveUI();
-      setTimeout(()=>{ btn.textContent='☁️ Zálohovať teraz do Google Drive'; btn.disabled=false; }, 2500);
+      updateDriveUI(); renderBackupBanner();
+      setTimeout(resetBtn, 2500);
     } else {
       throw new Error('HTTP ' + (resp?resp.status:'?'));
     }
@@ -3490,19 +3775,18 @@ async function driveBackup(){
     btn.disabled = false;
     if(e.message.includes('401') || e.message.includes('403')){
       driveToken = null; updateDriveUI();
-      alert('Prihlásenie vypršalo. Prihlás sa znova.');
-    } else {
+      if(!auto) alert('Prihlásenie vypršalo. Prihlás sa znova.');
+    } else if(!auto){
       alert('Chyba zálohy: ' + e.message);
     }
-    setTimeout(()=>{ btn.textContent='☁️ Zálohovať teraz do Google Drive'; btn.disabled=false; }, 2000);
+    setTimeout(resetBtn, 2000);
   }
 }
 
 async function driveRestore(){
-  if(!driveToken){ alert('Najprv sa prihlás do Google Drive'); return; }
-  if(!confirm('Obnoviť databázu zo zálohy?\nAktuálne dáta budú prepísané!')){return;}
-
+  if(!driveTokenOK()){ alert('Najprv sa prihlás do Google Drive'); return; }
   const btn = document.getElementById('driveRestoreBtn');
+  const resetBtn = ()=>{ btn.textContent='⬇️ Obnoviť zálohu z Google Drive'; btn.disabled=false; };
   btn.textContent = '⏳ Hľadám zálohu...';
   btn.disabled = true;
 
@@ -3510,38 +3794,28 @@ async function driveRestore(){
     // Vždy vyhľadaj podľa mena — funguje na PC aj mobile bez uloženého fileId
     const foundId = await driveFindFile();
     if(!foundId){
-      btn.textContent = '⬇️ Obnoviť zálohu z Google Drive';
-      btn.disabled = false;
-      alert('Žiadna záloha nenájdená na Google Drive.\nNajprv zálohu vytvor na PC.');
+      resetBtn();
+      alert('Žiadna záloha nenájdená na Google Drive.\nNajprv ju vytvor na zariadení, kde sú dáta.');
       return;
     }
-
     btn.textContent = '⏳ Sťahujem...';
     const resp = await fetch(
       `https://www.googleapis.com/drive/v3/files/${foundId}?alt=media`,
       { headers:{'Authorization':'Bearer '+driveToken} }
     );
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    if(data.custs){
-      const l=checkImportLimit(data.custs);
-      if(!l){ btn.textContent='⬇️ Obnoviť zálohu z Google Drive'; btn.disabled=false; return; }
-      custs = l; save({allowLess:true, allowEmpty:true}); storageWiped=false;
+    let data;
+    try{ data = await resp.json(); }catch(err){ resetBtn(); alert('❌ Záloha na Google Drive je poškodená.\n\nNič sa nezmenilo.'); return; }
+    resetBtn();
+    if(await applyBackup(data,'Google Drive')){
+      localStorage.setItem('sk2_driveLinked', '1');
+      localStorage.setItem('sk2_driveLastCount', String(custs.length));
+      loadSett();
+      alert('✅ Záloha obnovená!\n' + custs.length + ' zákazníkov načítaných.\nZálohovaná: ' + (data.ts ? new Date(data.ts).toLocaleString('sk-SK') : '—')
+        + '\n\nFotky v zálohe na Drive sú zmenšené; tie, ktoré toto zariadenie malo, ostali v plnej kvalite.');
     }
-    if(data.settings){
-      // Zachovaj Client ID z aktuálneho zariadenia
-      const localClientId = settings.driveClientId;
-      settings = data.settings;
-      if(localClientId) settings.driveClientId = localClientId;
-      saveSett();
-    }
-    renderCusts(); renderDash(); loadDriveSettings();
-    btn.textContent = '⬇️ Obnoviť zálohu z Google Drive';
-    btn.disabled = false;
-    alert('✅ Záloha obnovená!\n' + custs.length + ' zákazníkov načítaných.\nZálohovaná: ' + (data.ts ? new Date(data.ts).toLocaleString('sk-SK') : '—'));
   } catch(e){
-    btn.textContent = '⬇️ Obnoviť zálohu z Google Drive';
-    btn.disabled = false;
+    resetBtn();
     if(e.message.includes('401') || e.message.includes('403')){
       driveToken = null; updateDriveUI();
       alert('Prihlásenie vypršalo. Prihlás sa znova.');
@@ -3551,14 +3825,23 @@ async function driveRestore(){
   }
 }
 
-// Auto-backup reminder on page visibility change
+// Automatická záloha pri odchode z aplikácie (najviac raz denne)
+async function autoFolderBackup(){
+  if(!FOLDER_SUPPORTED) return;
+  const last = parseInt(localStorage.getItem('sk2_folderLastBackup')||'0');
+  if((Date.now()-last)/3600000 < 23) return;
+  if(!folderHandle) await loadFolderHandle();
+  if(!folderHandle) return;
+  try{ if(folderHandle.queryPermission && await folderHandle.queryPermission({mode:'readwrite'})!=='granted') return; }catch(e){ return; }
+  await backupToFolder(true);
+}
 document.addEventListener('visibilitychange', ()=>{
-  if(document.hidden && driveToken){
+  if(!document.hidden) return;
+  if(!storageReady || storageWiped || storageFailed || !custs.length) return;
+  autoFolderBackup().catch(()=>{});
+  if(driveTokenOK()){
     const last = parseInt(localStorage.getItem('sk2_driveLastBackup')||'0');
-    const hoursSince = (Date.now()-last)/3600000;
-    if(hoursSince >= 23 && storageReady && !storageWiped){ // ~daily
-      driveBackup();
-    }
+    if((Date.now()-last)/3600000 >= 23) driveBackup(true);
   }
 });
 
