@@ -111,6 +111,11 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
 .f3.two{grid-template-columns:1fr 1fr;}
+.dev-card{background:var(--surf2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
+.dev-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:14px;}
+.dev-hd .dl-del{padding:6px 10px;}
+.dev-pick{display:block;width:100%;text-align:left;background:var(--surf2);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;margin-bottom:6px;font-size:14px;cursor:pointer;}
+.dev-pick small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:3px;}
 .chkline{display:flex;align-items:center;gap:10px;background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-bottom:10px;font-size:14px;cursor:pointer;}
 .chkline input{width:20px;height:20px;accent-color:var(--accent3);flex-shrink:0;}
 .stamp-prev{width:120px;height:70px;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;
@@ -361,7 +366,8 @@ input[type="file"]{display:none;}
 <!-- PAGE: CUSTOMERS -->
 <div class="pg" id="page-customers">
   <div class="sbar">
-    <input type="text" id="searchInput" placeholder="Hľadať zákazníka..." oninput="renderCusts()">
+    <input type="text" id="searchInput" placeholder="Hľadať zákazníka alebo S/N..." oninput="renderCusts()">
+    <button class="badd" onclick="scanSearch()" title="Nájsť zákazníka naskenovaním štítka" style="font-size:20px">📷</button>
     <button class="badd" onclick="openAdd()">+</button>
   </div>
   <div class="chips">
@@ -545,7 +551,7 @@ input[type="file"]{display:none;}
 
   <div class="mtabs">
     <button class="mtab active" onclick="switchTab('tab-basic',this)">👤 Základné</button>
-    <button class="mtab" onclick="switchTab('tab-boiler',this)">🔧 Kotol</button>
+    <button class="mtab" onclick="switchTab('tab-boiler',this)">🔧 Zariadenia</button>
     <button class="mtab" onclick="switchTab('tab-photos',this)">📸 Fotky</button>
     <button class="mtab" onclick="switchTab('tab-loc',this)">📍 GPS</button>
   </div>
@@ -571,6 +577,8 @@ input[type="file"]{display:none;}
 
   <!-- TAB: BOILER -->
   <div class="mtab-content" id="tab-boiler">
+    <div class="stitle" style="margin-top:0">🔧 Zariadenie 1</div>
+    <div class="fg"><label class="fl">Umiestnenie (nepovinné)</label><input class="fi" id="fPlace" placeholder="napr. kotolňa, garáž, podkrovie"></div>
     <div class="fg"><label class="fl">Výrobca kotla</label>
       <select class="fsel" id="fBrand">
         <option value="">-- Vyberte výrobcu --</option>
@@ -612,24 +620,7 @@ input[type="file"]{display:none;}
       </div>
     </div>
 
-    <!-- SCANNER OVERLAY -->
-    <div id="scannerOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:999;flex-direction:column;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px;background:rgba(0,0,0,.8);">
-        <div id="scannerStatus" style="color:#fff;font-family:var(--mono);font-size:12px;">📷 Inicializujem kameru...</div>
-        <button onclick="closeScanner()" style="background:var(--danger);border:none;border-radius:8px;color:#fff;padding:8px 14px;font-size:14px;cursor:pointer;">✕ Zavrieť</button>
-      </div>
-      <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;">
-        <video id="scannerVideo" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline muted></video>
-        <div style="position:absolute;border:2px solid var(--accent);border-radius:8px;width:80%;height:100px;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;"></div>
-        <div style="position:absolute;bottom:80px;left:0;right:0;text-align:center;">
-          <button id="scanPhotoBtn" onclick="useCameraPhoto()" style="display:none;background:var(--accent);border:none;border-radius:10px;color:var(--bg);padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">📸 Nafotiť štítok</button>
-        </div>
-        <div style="position:absolute;bottom:20px;color:rgba(255,255,255,.7);font-family:var(--mono);font-size:11px;text-align:center;padding:0 20px;">Namieriť na čiarový alebo QR kód</div>
-      </div>
-      <canvas id="scannerCanvas" style="display:none;"></canvas>
-    </div>
-    <!-- Hidden input for photo scan fallback -->
-    <input type="file" id="photoScanInput" accept="image/*" capture="environment" onchange="scanFromPhoto(event)" style="display:none;">
+    <div id="devEditor"></div>
   </div>
 
   <!-- TAB: PHOTOS -->
@@ -738,6 +729,7 @@ input[type="file"]{display:none;}
   <div class="mdrag"></div>
   <div class="mtitle"><span id="histModalTitle">Servisný záznam</span><button class="mclose" onclick="closeHM()">✕</button></div>
   <div class="fg"><label class="fl">Dátum</label><input class="fi" id="hDate" type="date"></div>
+  <div class="fg" id="hDevWrap" style="display:none"><label class="fl">Zariadenie</label><select class="fsel" id="hDev"></select></div>
   <div class="fg"><label class="fl">Typ zásahu</label>
     <select class="fsel" id="hType">
       <option>Ročná prehliadka</option><option>Oprava</option><option>Výmena dielu</option>
@@ -759,6 +751,7 @@ input[type="file"]{display:none;}
 <div class="modal">
   <div class="mdrag"></div>
   <div class="mtitle"><span id="protoTitle">Servisný protokol</span><button class="mclose" onclick="closePM()">✕</button></div>
+  <div class="fg" id="pDevWrap" style="display:none"><label class="fl">Zariadenie</label><select class="fsel" id="pDev" onchange="protoDraft.devId=this.value"></select></div>
 
   <div class="frow">
     <div class="fg"><label class="fl">Číslo protokolu</label><input class="fi" id="pCislo"></div>
@@ -815,6 +808,15 @@ input[type="file"]{display:none;}
 </div>
 </div>
 
+<!-- MODAL: VÝBER ZARIADENIA -->
+<div class="ov-bg" id="devPickModal">
+<div class="modal">
+  <div class="mdrag"></div>
+  <div class="mtitle"><span id="devPickTitle">Vyber zariadenie</span><button class="mclose" onclick="closeDevPick()">✕</button></div>
+  <div id="devPickList"></div>
+</div>
+</div>
+
 <!-- MODAL: E-MAIL PROTOKOLU -->
 <div class="ov-bg" id="mailModal">
 <div class="modal">
@@ -841,6 +843,26 @@ input[type="file"]{display:none;}
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('licModal').classList.remove('open')">Zavrieť</button>
 </div>
 </div>
+
+    <!-- SCANNER OVERLAY -->
+    <div id="scannerOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:999;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px;background:rgba(0,0,0,.8);">
+        <div id="scannerStatus" style="color:#fff;font-family:var(--mono);font-size:12px;">📷 Inicializujem kameru...</div>
+        <button id="torchBtn" onclick="toggleTorch()" style="display:none;background:#ffd60a;border:none;border-radius:8px;color:#000;padding:8px 12px;font-size:14px;font-weight:700;cursor:pointer;margin-left:auto;margin-right:8px;">🔦 Svetlo</button>
+        <button onclick="closeScanner()" style="background:var(--danger);border:none;border-radius:8px;color:#fff;padding:8px 14px;font-size:14px;cursor:pointer;">✕ Zavrieť</button>
+      </div>
+      <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;">
+        <video id="scannerVideo" style="width:100%;height:100%;object-fit:cover;" autoplay playsinline muted></video>
+        <div style="position:absolute;border:2px solid var(--accent);border-radius:8px;width:80%;height:100px;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;"></div>
+        <div style="position:absolute;bottom:80px;left:0;right:0;text-align:center;">
+          <button id="scanPhotoBtn" onclick="useCameraPhoto()" style="display:none;background:var(--accent);border:none;border-radius:10px;color:var(--bg);padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">📸 Nafotiť štítok</button>
+        </div>
+        <div style="position:absolute;bottom:20px;color:rgba(255,255,255,.7);font-family:var(--mono);font-size:11px;text-align:center;padding:0 20px;">Namieriť na čiarový alebo QR kód</div>
+      </div>
+      <canvas id="scannerCanvas" style="display:none;"></canvas>
+    </div>
+    <!-- Hidden input for photo scan fallback -->
+    <input type="file" id="photoScanInput" accept="image/*" capture="environment" onchange="scanFromPhoto(event)" style="display:none;">
 
 <!-- PRINT AREA (hidden, shown on print) -->
 <div id="printArea" style="display:none"></div>
@@ -1403,14 +1425,145 @@ async function bootStorage(){
 // ═══════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════
-function getSt(c){
-  if(!c.nextService)return'none';
-  const d=Math.ceil((new Date(c.nextService)-new Date())/86400000);
+
+// ═══════════════════════════════════════════════
+// VIAC ZARIADENÍ U ZÁKAZNÍKA
+// Zariadenie 1 = pôvodné polia zákazníka (boilerBrand, model, serial, …),
+// ďalšie zariadenia sú v c.devices s rovnakými názvami polí.
+// ═══════════════════════════════════════════════
+const DEV_FIELDS=['place','boilerBrand','model','boilerType','year','power','serial','lastService','nextService'];
+function devList(c){
+  const main={id:'main',main:true}; DEV_FIELDS.forEach(f=>main[f]=c[f]||'');
+  return [main,...(c.devices||[])];
+}
+function getDev(c,id){ const l=devList(c); return l.find(d=>d.id===(id||'main'))||l[0]; }
+function hasMulti(c){ return !!(c.devices&&c.devices.length); }
+function devName(d){ return [d.boilerBrand,d.model].filter(Boolean).join(' · ')||'Zariadenie'; }
+function devLabel(d){ return (d.place?d.place+' – ':'')+devName(d); }
+function devShort(c,id){
+  if(id==='ALL') return 'všetky zariadenia';
+  const l=devList(c), i=l.findIndex(d=>d.id===(id||'main')); const d=l[i<0?0:i];
+  return (i<0?1:i+1)+'. '+(d.place||d.boilerBrand||'zariadenie');
+}
+function effNext(c){ const ds=devList(c).map(d=>d.nextService).filter(Boolean).sort(); return ds[0]||''; }
+function dueDev(c){ const l=devList(c).filter(d=>d.nextService).sort((a,b)=>a.nextService.localeCompare(b.nextService)); return l[0]||devList(c)[0]; }
+function setDevDates(c,id,last,next){
+  if(!id||id==='main'){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
+  const d=(c.devices||[]).find(x=>x.id===id); if(!d){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
+  if(last)d.lastService=last; if(next)d.nextService=next;
+}
+function normSN(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function custMatches(c,q){
+  if(!q) return true;
+  const txt=[c.name,c.city,c.phone,c.addr,c.email,...devList(c).flatMap(d=>[d.boilerBrand,d.model,d.serial,d.place])].join(' ').toLowerCase();
+  if(txt.includes(q)) return true;
+  const qn=normSN(q);
+  return qn.length>=4 && devList(c).some(d=>d.serial&&normSN(d.serial).includes(qn));
+}
+function fillDevSelect(selId,wrapId,c,val){
+  const sel=document.getElementById(selId), wrap=document.getElementById(wrapId); if(!sel) return;
+  sel.innerHTML=devList(c).map((d,i)=>`<option value="${d.id}">${i+1}. ${esc(devLabel(d))}</option>`).join('');
+  sel.value=devList(c).some(d=>d.id===val)?val:'main';
+  if(wrap) wrap.style.display=hasMulti(c)?'':'none';
+}
+function histDevVal(){ const s=document.getElementById('hDev'); return (s&&s.value)||'main'; }
+
+// ── editor ďalších zariadení vo formulári zákazníka
+let editDevices=[];
+function selOptions(srcId,sel){
+  const opts=[...document.getElementById(srcId).options].map(o=>o.value);
+  let h=(sel&&!opts.includes(sel))?`<option selected value="${esc(sel)}">${esc(sel)}</option>`:'';
+  return h+[...document.getElementById(srcId).options].map(o=>`<option value="${esc(o.value)}" ${o.value===sel?'selected':''}>${esc(o.text)}</option>`).join('');
+}
+function renderDevEditor(){
+  const el=document.getElementById('devEditor'); if(!el) return;
+  const inp=(i,f,ph,type)=>`<input class="fi" ${type?'type="'+type+'"':''} value="${esc(editDevices[i][f]||'')}" placeholder="${ph||''}" oninput="editDevices[${i}].${f}=this.value">`;
+  el.innerHTML=`<div class="stitle">➕ Ďalšie zariadenia u zákazníka</div>`+
+    editDevices.map((d,i)=>`<div class="dev-card" id="devCard${i}">
+      <div class="dev-hd"><b>🔧 Zariadenie ${i+2}</b><button class="dl-del" onclick="delDev(${i})">✕ Odstrániť</button></div>
+      <div class="fg"><label class="fl">Umiestnenie</label>${inp(i,'place','napr. garáž, 1. poschodie')}</div>
+      <div class="frow">
+        <div class="fg"><label class="fl">Výrobca</label><select class="fsel" onchange="editDevices[${i}].boilerBrand=this.value">${selOptions('fBrand',d.boilerBrand)}</select></div>
+        <div class="fg"><label class="fl">Model</label>${inp(i,'model','napr. ecoTEC plus')}</div>
+      </div>
+      <div class="fg"><label class="fl">Typ zariadenia</label><select class="fsel" onchange="editDevices[${i}].boilerType=this.value">${selOptions('fType',d.boilerType)}</select></div>
+      <div class="frow">
+        <div class="fg"><label class="fl">Rok inštalácie</label>${inp(i,'year','2018','number')}</div>
+        <div class="fg"><label class="fl">Výkon (kW)</label>${inp(i,'power','24','number')}</div>
+      </div>
+      <div class="fg"><label class="fl">DSN / Sériové číslo</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="fi" style="flex:1" value="${esc(d.serial||'')}" placeholder="Zadaj ručne alebo skenuj..." oninput="editDevices[${i}].serial=this.value">
+          <button type="button" onclick="openScanner(t=>{editDevices[${i}].serial=t;renderDevEditor();})" style="background:var(--accent);border:none;border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;flex-shrink:0;">📷</button>
+        </div></div>
+      <div class="frow">
+        <div class="fg"><label class="fl">Posledná prehliadka</label>${inp(i,'lastService','','date')}</div>
+        <div class="fg"><label class="fl">Nasledujúca prehliadka</label>${inp(i,'nextService','','date')}</div>
+      </div>
+    </div>`).join('')+
+    `<button class="btn btn-s" onclick="addDev()">➕ Pridať ďalšie zariadenie (kotol, TČ, …)</button>`;
+}
+function addDev(){
+  const d={id:uid()}; DEV_FIELDS.forEach(f=>d[f]='');
+  editDevices.push(d); renderDevEditor();
+  const card=document.getElementById('devCard'+(editDevices.length-1)); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function delDev(i){
+  const d=editDevices[i];
+  if((d.boilerBrand||d.model||d.serial) && !confirm('Odstrániť zariadenie '+(i+2)+'?')) return;
+  editDevices.splice(i,1); renderDevEditor();
+}
+function cleanDevices(arr){
+  return (arr||[]).map(d=>{ const o={id:d.id||uid()}; DEV_FIELDS.forEach(f=>o[f]=String(d[f]||'').trim()); return o; })
+    .filter(d=>d.boilerBrand||d.model||d.serial||d.place||d.nextService);
+}
+
+// ── výber zariadenia (rýchly servis)
+let devPickCb=null;
+function pickDevice(c,title,cb,allowAll){
+  devPickCb=cb;
+  document.getElementById('devPickTitle').textContent=title;
+  document.getElementById('devPickList').innerHTML=devList(c).map((d,i)=>`
+    <button class="dev-pick" onclick="devPicked('${d.id}')">${i+1}. ${esc(devLabel(d))}
+      <small>${d.serial?'S/N '+esc(d.serial)+' · ':''}ďalšia prehliadka ${fmt(d.nextService)}</small></button>`).join('')+
+    (allowAll?`<button class="dev-pick" style="border-color:var(--accent3)" onclick="devPicked('ALL')">✅ Všetky zariadenia</button>`:'');
+  document.getElementById('devPickModal').classList.add('open');
+}
+function devPicked(id){ const cb=devPickCb; closeDevPick(); if(cb) cb(id); }
+function closeDevPick(){ document.getElementById('devPickModal').classList.remove('open'); devPickCb=null; }
+
+// ── nájsť zákazníka naskenovaním výrobného štítka
+function scanSearch(){
+  openScanner(code=>{
+    const qn=normSN(code);
+    const hits=[];
+    custs.forEach(c=>devList(c).forEach(d=>{
+      const s=normSN(d.serial); if(!s||!qn) return;
+      if(s===qn || (s.length>=6&&qn.includes(s)) || (qn.length>=6&&s.includes(qn))) hits.push({c,d});
+    }));
+    const uniq=[...new Set(hits.map(h=>h.c))];
+    if(uniq.length===1){
+      document.getElementById('searchInput').value=''; renderCusts();
+      openDetail(uniq[0].id);
+      const h=hits.find(x=>x.c===uniq[0]);
+      showToast('✅ '+uniq[0].name+(hasMulti(uniq[0])?' · '+devShort(uniq[0],h.d.id):''));
+    } else {
+      document.getElementById('searchInput').value=code; renderCusts();
+      if(uniq.length>1) showToast('Nájdených '+uniq.length+' zákazníkov s týmto kódom','var(--warn)');
+      else showToast('❌ Žiadny zákazník so S/N '+code,'var(--danger)');
+    }
+  });
+}
+function stOfDate(next){
+  if(!next)return'none';
+  const d=Math.ceil((new Date(next)-new Date())/86400000);
   if(d<0)return'ov'; if(d<=7)return'd'; if(d<=30)return'w'; return'ok';
 }
+function getSt(c){ return stOfDate(effNext(c)); }
 function getDaysText(c){
-  if(!c.nextService)return'—';
-  const d=Math.ceil((new Date(c.nextService)-new Date())/86400000);
+  const nx=effNext(c);
+  if(!nx)return'—';
+  const d=Math.ceil((new Date(nx)-new Date())/86400000);
   if(d<0)return`Po termíne ${Math.abs(d)} dní`;
   if(d===0)return'DNES ❗'; return`Za ${d} dní`;
 }
@@ -1465,18 +1618,19 @@ function renderDash(){
   // Tech label
   if(settings.name) document.getElementById('techLabel').textContent=settings.name;
 
-  const attn=custs.filter(c=>['ov','d','w'].includes(getSt(c))).sort((a,b)=>new Date(a.nextService)-new Date(b.nextService));
+  const attn=custs.filter(c=>['ov','d','w'].includes(getSt(c))).sort((a,b)=>new Date(effNext(a))-new Date(effNext(b)));
   const al=document.getElementById('alertList');
   if(!attn.length){al.innerHTML='<div class="empty"><div class="empty-ic">✅</div>Všetci v poriadku</div>';}
-  else{al.innerHTML=attn.map(c=>{const s=getSt(c);return`<div class="ai ${s}" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(s)}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${c.boilerBrand||'—'} · ${getDaysText(c)} · ${c.city||''}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;}).join('');}
+  else{al.innerHTML=attn.map(c=>{const s=getSt(c);return`<div class="ai ${s}" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(s)}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${esc(hasMulti(c)?devLabel(dueDev(c)):(c.boilerBrand||'—'))} · ${getDaysText(c)} · ${c.city||''}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;}).join('');}
 
   // Month stats — vždy aktualizuj
   const now=new Date(), m=now.getMonth(), y=now.getFullYear();
-  const thisMonth=custs.filter(c=>c.nextService&&new Date(c.nextService).getMonth()===m&&new Date(c.nextService).getFullYear()===y);
+  const inMonth=d=>d.nextService&&new Date(d.nextService).getMonth()===m&&new Date(d.nextService).getFullYear()===y;
+  const thisMonth=custs.filter(c=>devList(c).some(inMonth));
   const ms=document.getElementById('monthStats');
   if(!thisMonth.length){ms.innerHTML='<div class="empty"><div class="empty-ic">📅</div>Žiadne prehliadky tento mesiac</div>';}
   else{ms.innerHTML=`<div class="df"><div class="dl">Prehliadky tento mesiac</div><div class="dv" style="color:var(--accent)">${thisMonth.length} zákazníkov</div></div>`+
-    thisMonth.map(c=>`<div class="ai" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(getSt(c))}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${fmt(c.nextService)} · ${c.city||''}</div></div></div>`).join('');}
+    thisMonth.map(c=>`<div class="ai" onclick="openDetail('${c.id}')"><div class="ai-ic">${stDot(getSt(c))}</div><div class="ai-tx"><div class="ai-nm">${c.name}</div><div class="ai-ds">${devList(c).filter(inMonth).map(d=>fmt(d.nextService)+(hasMulti(c)?' ('+esc(devShort(c,d.id))+')':'')).join(', ')} · ${c.city||''}</div></div></div>`).join('');}
 }
 
 // ═══════════════════════════════════════════════
@@ -1487,7 +1641,7 @@ function renderCusts(){
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
   const stOrd={ov:0,d:1,w:2,ok:3,none:4};
   let list=custs.filter(c=>{
-    const m=(c.name+c.city+c.boilerBrand+c.model+c.phone).toLowerCase().includes(q);
+    const m=custMatches(c,q);
     const s=getSt(c);
     if(filterVal==='ok')return m&&s==='ok';
     if(filterVal==='w')return m&&s==='w';
@@ -1500,8 +1654,8 @@ function renderCusts(){
   el.innerHTML=list.map(c=>{const s=getSt(c);return`<div class="card ${s}" onclick="openDetail('${c.id}')">
     <div class="ch"><div class="cn">${c.name}</div><div class="cs">${stLabel(s)}</div></div>
     <div class="cm">📍 <span>${c.psc?c.psc+' ':''}${c.city||'—'}</span> &nbsp; 📱 <span>${c.phone||'—'}</span><br>
-    🔧 <span>${c.boilerBrand||'—'}</span>${c.model?' · '+c.model:''}<br>
-    📅 <span>${fmt(c.nextService)}</span> — <span style="color:${stColor(s)}">${getDaysText(c)}</span></div>
+    🔧 <span>${c.boilerBrand||'—'}</span>${c.model?' · '+c.model:''}${hasMulti(c)?` <span style="color:var(--accent)">+${c.devices.length} ďalšie</span>`:''}<br>
+    📅 <span>${fmt(effNext(c))}</span> — <span style="color:${stColor(s)}">${getDaysText(c)}</span></div>
   </div>`;}).join('');
 }
 
@@ -1509,26 +1663,28 @@ function renderCusts(){
 // CALENDAR
 // ═══════════════════════════════════════════════
 function renderCal(){
-  const sorted=custs.filter(c=>c.nextService).sort((a,b)=>new Date(a.nextService)-new Date(b.nextService));
+  const rows=[];
+  custs.forEach(c=>devList(c).forEach(d=>{ if(d.nextService) rows.push({c,d}); }));
+  rows.sort((a,b)=>new Date(a.d.nextService)-new Date(b.d.nextService));
   const el=document.getElementById('calList');
-  if(!sorted.length){el.innerHTML='<div class="empty"><div class="empty-ic">📅</div>Žiadne plánované prehliadky</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="empty"><div class="empty-ic">📅</div>Žiadne plánované prehliadky</div>';return;}
   const groups={};
-  sorted.forEach(c=>{
-    const d=new Date(c.nextService);
+  rows.forEach(r=>{
+    const d=new Date(r.d.nextService);
     const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     const label=d.toLocaleDateString('sk-SK',{month:'long',year:'numeric'});
     if(!groups[key])groups[key]={label,items:[]};
-    groups[key].items.push(c);
+    groups[key].items.push(r);
   });
   el.innerHTML=Object.values(groups).map(g=>`
     <div class="cal-month">
       <div class="cal-month-hdr">${g.label.toUpperCase()}</div>
-      ${g.items.map(c=>{const s=getSt(c);const d=new Date(c.nextService);return`
+      ${g.items.map(({c,d:dv})=>{const s=stOfDate(dv.nextService);const d=new Date(dv.nextService);return`
         <div class="cal-row" onclick="openDetail('${c.id}')">
           <div class="cal-day">${d.getDate()}</div>
           <div class="cal-info">
             <div class="cal-name">${c.name}</div>
-            <div class="cal-sub">${c.boilerBrand||''} · ${c.city||''}</div>
+            <div class="cal-sub">${esc(hasMulti(c)?devLabel(dv):(dv.boilerBrand||''))} · ${c.city||''}</div>
           </div>
           <div class="cal-dot" style="background:${stColor(s)}"></div>
         </div>`}).join('')}
@@ -1580,13 +1736,14 @@ function openAdd(){
   editId=null;
   document.getElementById('custModalTitle').textContent='Nový zákazník';
   document.getElementById('delBtn').style.display='none';
-  ['fName','fPhone','fEmail','fCity','fAddr','fPsc','fModel','fNotes','fYear','fPower','fSerial'].forEach(id=>document.getElementById(id).value='');
+  ['fName','fPhone','fEmail','fPlace','fCity','fAddr','fPsc','fModel','fNotes','fYear','fPower','fSerial'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('fBrand').value=''; document.getElementById('fType').value='';
   document.getElementById('fLat').value=''; document.getElementById('fLng').value='';
   document.getElementById('fLast').value='';
   document.getElementById('fNext').value='';
   currentEditPhotos=[];
   renderPhotoGrid();
+  editDevices=[]; renderDevEditor();
   // reset tabs
   const modal=document.querySelector('#custModal .modal');
   modal.querySelectorAll('.mtab-content').forEach((x,i)=>{x.classList.toggle('active',i===0);});
@@ -1610,6 +1767,8 @@ function openEdit(id){
   document.getElementById('fYear').value=c.year||'';
   document.getElementById('fPower').value=c.power||'';
   document.getElementById('fSerial').value=c.serial||'';
+  document.getElementById('fPlace').value=c.place||'';
+  editDevices=JSON.parse(JSON.stringify(c.devices||[])); renderDevEditor();
   document.getElementById('fLast').value=c.lastService||'';
   document.getElementById('fNext').value=c.nextService||'';
   document.getElementById('fNotes').value=c.notes||'';
@@ -1630,6 +1789,7 @@ async function saveCust(){
   if(!editId && !canAddCustomer()){ closeCM(); showLimitModal(); return; }
   const existing=editId?custs.find(x=>x.id===editId):null;
   const c={
+    ...(existing||{}),
     id:editId||uid(), name,
     phone:document.getElementById('fPhone').value.trim(),
     email:document.getElementById('fEmail').value.trim(),
@@ -1642,6 +1802,8 @@ async function saveCust(){
     year:document.getElementById('fYear').value,
     power:document.getElementById('fPower').value,
     serial:document.getElementById('fSerial').value.trim(),
+    place:document.getElementById('fPlace').value.trim(),
+    devices:cleanDevices(editDevices),
     lastService:document.getElementById('fLast').value,
     nextService:document.getElementById('fNext').value,
     notes:document.getElementById('fNotes').value.trim(),
@@ -1734,12 +1896,18 @@ function openDetail(id){
     </div>
     <div class="df"><div class="dl">Telefón</div><div class="dv"><a href="tel:${c.phone||''}" style="color:var(--accent);text-decoration:none">${c.phone||'—'}</a></div></div>
     <div class="df"><div class="dl">Adresa</div><div class="dv">${c.addr||'—'}${c.psc?' '+c.psc:''}${c.city?', '+c.city:''}</div></div>
-    <div class="df"><div class="dl">Kotol</div><div class="dv">${c.boilerBrand||'—'}${c.model?' · '+c.model:''}</div></div>
+    <div class="df"><div class="dl">${hasMulti(c)?'Zariadenie 1'+(c.place?' · '+esc(c.place):''):'Kotol'+(c.place?' · '+esc(c.place):'')}</div><div class="dv">${c.boilerBrand||'—'}${c.model?' · '+c.model:''}</div></div>
     ${c.boilerType?`<div class="df"><div class="dl">Typ</div><div class="dv">${c.boilerType}</div></div>`:''}
     ${c.year||c.power?`<div class="df"><div class="dl">Rok / Výkon</div><div class="dv">${c.year||'—'} / ${c.power?c.power+' kW':'—'}</div></div>`:''}
     ${c.serial?`<div class="df"><div class="dl">Sériové číslo</div><div class="dv" style="font-family:var(--mono)">${c.serial}</div></div>`:''}
     <div class="df"><div class="dl">Posledná prehliadka</div><div class="dv">${fmt(c.lastService)}</div></div>
     <div class="df"><div class="dl">Nasledujúca prehliadka</div><div class="dv">${fmt(c.nextService)}</div></div>
+    ${(c.devices||[]).map((d,i)=>{const s=stOfDate(d.nextService);return `<div class="df" style="border-left:3px solid ${stColor(s)}">
+      <div class="dl">Zariadenie ${i+2}${d.place?' · '+esc(d.place):''}</div>
+      <div class="dv">${esc(devName(d))}${d.boilerType?'<br><span style="font-size:12px;font-weight:400">'+esc(d.boilerType)+'</span>':''}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6">
+        ${d.serial?'S/N '+esc(d.serial)+'<br>':''}${d.year||d.power?'Rok '+esc(d.year||'—')+' · '+(d.power?esc(d.power)+' kW':'—')+'<br>':''}
+        Posledná: ${fmt(d.lastService)} · Ďalšia: <span style="color:${stColor(s)}">${fmt(d.nextService)}</span></div></div>`;}).join('')}
     ${c.notes?`<div class="df"><div class="dl">Poznámky</div><div class="dv" style="font-size:13px;font-weight:400;line-height:1.5">${c.notes.replace(/\n/g,'<br>')}</div></div>`:''}
   `;
   // reset detail tabs
@@ -1756,15 +1924,19 @@ function closeDM(){document.getElementById('detailModal').classList.remove('open
 function editFromDetail(){openEdit(detailId);}
 function markServiced(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
-  const today=new Date().toISOString().split('T')[0];
-  c.lastService=today;
-  const next=new Date(); next.setMonth(next.getMonth()+(settings.interval||12));
-  c.nextService=next.toISOString().split('T')[0];
-  // auto-add history
-  c.history=c.history||[];
-  c.history.unshift({id:uid(),date:today,type:'Ročná prehliadka',desc:'Servis vykonaný.',labor:0,parts:0,tech:settings.name||''});
-  save(); closeDM(); renderCusts(); renderDash();
-  showToast('✅ Servis zaznamenaný · ďalší: '+fmt(c.nextService));
+  const run=ids=>{
+    const today=new Date().toISOString().split('T')[0];
+    const next=new Date(); next.setMonth(next.getMonth()+(settings.interval||12));
+    const nx=next.toISOString().split('T')[0];
+    ids.forEach(id=>setDevDates(c,id,today,nx));
+    c.history=c.history||[];
+    c.history.unshift({id:uid(),date:today,type:'Ročná prehliadka',desc:ids.length>1?'Servis vykonaný (všetky zariadenia).':'Servis vykonaný.',
+      labor:0,parts:0,tech:settings.name||'',devId:ids.length>1?'ALL':ids[0]});
+    save(); closeDM(); renderCusts(); renderDash();
+    showToast('✅ Servis zaznamenaný · ďalší: '+fmt(nx));
+  };
+  if(!hasMulti(c)) return run(['main']);
+  pickDevice(c,'Ktoré zariadenie bolo servisované?',id=>run(id==='ALL'?devList(c).map(d=>d.id):[id]),true);
 }
 
 // ═══════════════════════════════════════════════
@@ -1844,7 +2016,7 @@ function renderHistList(){
   el.innerHTML=[...h].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`
     <div class="hist-item">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
-        <div class="hist-date">${fmt(e.date)} · ${e.type}</div>
+        <div class="hist-date">${fmt(e.date)} · ${e.type}${hasMulti(c)?' · '+esc(devShort(c,e.devId)):''}</div>
         <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px;">
           <button onclick="editHistEntry('${e.id}')" style="background:var(--surf3);border:none;border-radius:6px;color:var(--accent);padding:3px 8px;font-size:11px;cursor:pointer;">✏️</button>
           <button onclick="delHistEntry('${e.id}')" style="background:rgba(239,35,60,.15);border:none;border-radius:6px;color:var(--danger);padding:3px 8px;font-size:11px;cursor:pointer;">🗑️</button>
@@ -1860,6 +2032,7 @@ function openAddHistory(){
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('hDate').value=today;
   document.getElementById('hType').value='Ročná prehliadka';
+  { const c=custs.find(x=>x.id===detailId); if(c) fillDevSelect('hDev','hDevWrap',c,dueDev(c).id); }
   document.getElementById('hDesc').value='';
   document.getElementById('hLabor').value='';
   document.getElementById('hParts').value='';
@@ -1882,7 +2055,7 @@ function saveHistory(){
         desc:document.getElementById('hDesc').value,
         labor:parseFloat(document.getElementById('hLabor').value)||0,
         parts:parseFloat(document.getElementById('hParts').value)||0,
-        tech:document.getElementById('hTech').value};
+        tech:document.getElementById('hTech').value, devId:histDevVal()};
     }
     editHistId=null;
   } else {
@@ -1891,16 +2064,15 @@ function saveHistory(){
       desc:document.getElementById('hDesc').value,
       labor:parseFloat(document.getElementById('hLabor').value)||0,
       parts:parseFloat(document.getElementById('hParts').value)||0,
-      tech:document.getElementById('hTech').value});
+      tech:document.getElementById('hTech').value, devId:histDevVal()});
   }
 
   // Posunúť dátum ďalšej prehliadky LEN pri ročnej prehliadke alebo uvedení do prevádzky
   const typesWithCountdown = ['Ročná prehliadka','Uvedenie do prevádzky'];
   if(typesWithCountdown.includes(type) && date){
-    c.lastService = date;
     const next = new Date(date);
     next.setMonth(next.getMonth() + (settings.interval||12));
-    c.nextService = next.toISOString().split('T')[0];
+    setDevDates(c, histDevVal(), date, next.toISOString().split('T')[0]);
   }
 
   save(); closeHM(); renderHistList(); renderCusts(); renderDash();
@@ -1914,6 +2086,7 @@ function editHistEntry(hid){
   editHistId = hid;
   document.getElementById('hDate').value=e.date||'';
   document.getElementById('hType').value=e.type||'Ročná prehliadka';
+  fillDevSelect('hDev','hDevWrap',c,e.devId&&e.devId!=='ALL'?e.devId:'main');
   document.getElementById('hDesc').value=e.desc||'';
   document.getElementById('hLabor').value=e.labor||'';
   document.getElementById('hParts').value=e.parts||'';
@@ -2037,6 +2210,8 @@ function openProtocol(pid){
     document.getElementById('protoTitle').textContent='Nový servisný protokol';
   }
   const p=protoDraft;
+  if(!pid && !p.devId) p.devId=dueDev(c).id;
+  fillDevSelect('pDev','pDevWrap',c,p.devId||'main');
   if(!p.checks||p.checks.length!==PROTO_UKONY.length) p.checks=PROTO_UKONY.map((_,i)=>(p.checks&&p.checks[i])||{s:'',n:''});
   document.getElementById('pCislo').value=p.cislo;
   document.getElementById('pDate').value=p.date;
@@ -2125,6 +2300,7 @@ function saveProtocol(andPrint){
   p.km=document.getElementById('pKm').value;
   p.tech=document.getElementById('pTech').value;
   p.preb=document.getElementById('pPreb').value;
+  p.devId=document.getElementById('pDev').value||'main';
 
   const isNew=!protoEditId;
   if(isNew){
@@ -2135,13 +2311,12 @@ function saveProtocol(andPrint){
     c.history=c.history||[];
     c.history.unshift({id:uid(),date:p.date,type:'Ročná prehliadka',
       desc:'Servisný protokol '+p.cislo+(p.zavady?' — '+p.zavady.split('\n')[0]:''),
-      labor:0,parts:parts,tech:p.tech});
+      labor:0,parts:parts,tech:p.tech,devId:p.devId});
   } else {
     const idx=c.protocols.findIndex(x=>x.id===protoEditId);
     if(idx>-1)c.protocols[idx]=p;
   }
-  if(p.date)c.lastService=p.date;
-  if(p.next)c.nextService=p.next;
+  setDevDates(c,p.devId,p.date,p.next);
   save(); renderProtoList(); renderHistList(); renderCusts(); renderDash();
   const pid=p.id; protoEditId=p.id;
   document.getElementById('protoTitle').textContent='Protokol '+p.cislo;
@@ -2163,7 +2338,7 @@ function renderProtoList(){
     <div class="proto-item">
       <div class="pi-t">
         <div class="pi-n">${esc(p.cislo)}</div>
-        <div class="pi-s">${fmt(p.date)} · ${esc((ZAVER_TXT[p.zaver]||'').split('–')[0].trim())}</div>
+        <div class="pi-s">${fmt(p.date)} · ${esc((ZAVER_TXT[p.zaver]||'').split('–')[0].trim())}${hasMulti(c)?' · '+esc(devShort(c,p.devId)):''}</div>
       </div>
       <button onclick="printProtocolById('${p.id}')">🖨️</button>
       <button onclick="openProtoEmail('${p.id}')" title="Poslať e-mailom">✉️</button>
@@ -2190,6 +2365,7 @@ function doPrintProtocol(c,p,blank){
 }
 
 function buildProtocolHTML(c,p,blank){
+  const D=getDev(c,p&&p.devId);
   const S=settings;
   const box=(on,bad)=>`<span class="box${on?' on':''}${bad?' bad':''}"></span>`;
   const v=x=>blank?'':esc(x==null?'':x);
@@ -2261,12 +2437,13 @@ function buildProtocolHTML(c,p,blank){
 
     <section class="spnb"><h2>2. Údaje o zariadení</h2>
       <table>
-        <tr><td class="lbl">Výrobca</td><td>${esc(c.boilerBrand||'')}</td>
-            <td class="lbl">Model</td><td>${esc(c.model||'')}</td>
-            <td class="lbl">Výrobné číslo</td><td>${esc(c.serial||'')}</td></tr>
-        <tr><td class="lbl">Typ</td><td>${esc(c.boilerType||'')}</td>
-            <td class="lbl">Výkon (kW)</td><td>${esc(c.power||'')}</td>
-            <td class="lbl">Rok inštalácie</td><td>${esc(c.year||'')}</td></tr>
+        <tr><td class="lbl">Výrobca</td><td>${esc(D.boilerBrand||'')}</td>
+            <td class="lbl">Model</td><td>${esc(D.model||'')}</td>
+            <td class="lbl">Výrobné číslo</td><td>${esc(D.serial||'')}</td></tr>
+        <tr><td class="lbl">Typ</td><td>${esc(D.boilerType||'')}</td>
+            <td class="lbl">Výkon (kW)</td><td>${esc(D.power||'')}</td>
+            <td class="lbl">Rok inštalácie</td><td>${esc(D.year||'')}</td></tr>
+        ${D.place?`<tr><td class="lbl">Umiestnenie</td><td colspan="5">${esc(D.place)}</td></tr>`:''}
       </table></section>
 
     <section><h2>3. Vykonané úkony</h2>
@@ -2540,7 +2717,7 @@ async function openProtoEmail(pid){
   const c=custs.find(x=>x.id===detailId); if(!c) return;
   const p=(c.protocols||[]).find(x=>x.id===pid); if(!p) return;
   const S=settings;
-  const dev=[c.boilerBrand,c.model].filter(Boolean).join(' ');
+  const _d=getDev(c,p.devId); const dev=[_d.boilerBrand,_d.model].filter(Boolean).join(' ');
   document.getElementById('mTo').value=c.email||'';
   document.getElementById('mSubj').value='Servisný protokol '+(p.cislo||'')+(p.date?' zo dňa '+fmt(p.date):'');
   document.getElementById('mBody').value=
@@ -2792,7 +2969,8 @@ function exportExcel(){
     'Kotol':c.boilerBrand||'','Model':c.model||'','Typ':c.boilerType||'',
     'Rok inst.':c.year||'','Výkon (kW)':c.power||'','S/N':c.serial||'',
     'Posledná prehliadka':fmt(c.lastService),'Nasledujúca prehliadka':fmt(c.nextService),
-    'Stav':stLabel(getSt(c)),'Dni do prehliadky':c.nextService?Math.ceil((new Date(c.nextService)-new Date())/86400000):'',
+    'Stav':stLabel(getSt(c)),'Dni do prehliadky':effNext(c)?Math.ceil((new Date(effNext(c))-new Date())/86400000):'',
+    'Ďalšie zariadenia':(c.devices||[]).map(d=>devLabel(d)+(d.serial?' S/N '+d.serial:'')+(d.nextService?' ďalšia '+fmt(d.nextService):'')).join('; '),
     'GPS Lat':c.lat||'','GPS Lng':c.lng||'','Poznámky':c.notes||'',
     'Počet servisov':(c.history||[]).length
   }));
@@ -2838,8 +3016,43 @@ async function clearAll(){
 // ═══════════════════════════════════════════════
 let scannerActive = false;
 let zxingReader = null;
+let scanCb = null, scanStream = null, torchOn = false;
 
-async function openScanner(){
+// Výsledok skenu: buď do poľa S/N vo formulári, alebo do zadanej funkcie
+function deliverScan(text){
+  const cb=scanCb; scanCb=null;
+  if(navigator.vibrate) navigator.vibrate([100,50,100]);
+  if(cb){ cb(text); return; }
+  const field = document.getElementById('fSerial');
+  field.value = text;
+  field.style.borderColor = 'var(--accent3)';
+  field.style.background = 'rgba(6,214,160,.1)';
+  setTimeout(() => { field.style.borderColor=''; field.style.background=''; }, 2000);
+}
+function torchTrack(){ return scanStream && scanStream.getVideoTracks ? scanStream.getVideoTracks()[0] : null; }
+function setupTorch(){
+  const btn=document.getElementById('torchBtn'); if(!btn) return;
+  torchOn=false; btn.textContent='🔦 Svetlo'; btn.style.display='none';
+  const check=()=>{
+    const t=torchTrack(); if(!t||!scannerActive) return;
+    let caps={}; try{ caps=t.getCapabilities?t.getCapabilities():{}; }catch(e){}
+    if(caps && caps.torch) btn.style.display='block';
+  };
+  check(); setTimeout(check,600); setTimeout(check,1500);
+}
+async function toggleTorch(){
+  const t=torchTrack(); if(!t) return;
+  try{
+    await t.applyConstraints({advanced:[{torch:!torchOn}]});
+    torchOn=!torchOn;
+    const btn=document.getElementById('torchBtn');
+    btn.textContent=torchOn?'🔦 Vypnúť':'🔦 Svetlo';
+    btn.style.background=torchOn?'#fff':'#ffd60a';
+  }catch(e){ alert('Svetlo sa nepodarilo zapnúť na tomto zariadení.'); }
+}
+
+async function openScanner(cb){
+  scanCb = (typeof cb==='function') ? cb : null;
   scannerActive = true;
   const overlay = document.getElementById('scannerOverlay');
 
@@ -2866,6 +3079,7 @@ async function openScanner(){
     });
     video.srcObject = stream;
     await video.play();
+    scanStream = stream; setupTorch();
 
     // Try BarcodeDetector first (fastest on supported devices)
     if('BarcodeDetector' in window){
@@ -2915,12 +3129,8 @@ function onScanSuccess(text, stream){
   if(stream) stream.getTracks().forEach(t => t.stop());
   if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader = null; }
   document.getElementById('scannerOverlay').style.display = 'none';
-  document.getElementById('fSerial').value = text;
-  const field = document.getElementById('fSerial');
-  field.style.borderColor = 'var(--accent3)';
-  field.style.background = 'rgba(6,214,160,.1)';
-  setTimeout(() => { field.style.borderColor=''; field.style.background=''; }, 2000);
-  if(navigator.vibrate) navigator.vibrate([100,50,100]);
+  scanStream = null; torchOn = false;
+  deliverScan(text);
 }
 
 function closeScanner(){
@@ -2929,6 +3139,7 @@ function closeScanner(){
   const video = document.getElementById('scannerVideo');
   if(video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
   video.srcObject = null;
+  scanStream = null; torchOn = false;
   document.getElementById('scannerOverlay').style.display = 'none';
 }
 
@@ -2950,11 +3161,7 @@ async function scanFromPhoto(e){
       const img = await createImageBitmap(file);
       const codes = await detector.detect(img);
       if(codes.length > 0){
-        document.getElementById('fSerial').value = codes[0].rawValue;
-        const field = document.getElementById('fSerial');
-        field.style.borderColor = 'var(--accent3)';
-        field.style.background = 'rgba(6,214,160,.1)';
-        setTimeout(() => { field.style.borderColor=''; field.style.background=''; }, 2000);
+        deliverScan(codes[0].rawValue);
         return;
       } else {
         alert('Kód sa nenašiel na fotke.\nSkús nafotiť zblízka za dobrého svetla.');
@@ -2964,7 +3171,7 @@ async function scanFromPhoto(e){
   }
   // No BarcodeDetector — ask manual
   const val = prompt('Automatické skenovanie nie je k dispozícii.\nZadaj DSN / sériové číslo ručne:');
-  if(val) document.getElementById('fSerial').value = val.trim();
+  if(val) deliverScan(val.trim()); else scanCb=null;
 }
 
 
@@ -3365,7 +3572,7 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowLeft') pvPrev();
 });
 
-['custModal','detailModal','histModal','driveHelpModal','licModal','mailModal'].forEach(id=>{
+['custModal','detailModal','histModal','driveHelpModal','devPickModal','licModal','mailModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
