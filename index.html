@@ -1187,8 +1187,8 @@ const PRO_FEATURES = ['Neobmedzený počet zákazníkov','Servisné protokoly �
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
 
 const SKLicense = (() => {
-  const SERVER = 'https://https://serviskotlov-licencie-v2.gappa1972.workers.dev/;          // <- adresa Workera
-  const PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: 'rILudfx8BtGNqqMheZYQ0Xd7OGkXVJNghgwjMMK_QVw', y: '2pflPOJUtYpr7wWuS4gE6A8hLMQegFLIFBVfurhoarc' }; // <- verejný kľúč z keygen.html
+  const SERVER = 'https://serviskotlov-licencie-v2.gappa1972.workers.dev';   // adresa Workera
+  const PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: 'rILudfx8BtGNqqMheZYQ0Xd7OGkXVJNghgwjMMK_QVw', y: '2pflPOJUtYpr7wWuS4gE6A8hLMQegFLIFBVfurhoarc' }; // verejný kľúč z keygen.html
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
 
