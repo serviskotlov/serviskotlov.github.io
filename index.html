@@ -1345,11 +1345,12 @@ const SKLicense = (() => {
   }
 
   async function setToken(token) {
-    const before = !!payload;
+    const sig = (p) => (p ? [p.limit || 0, p.exp || 0].join('|') : '-');
+    const before = sig(payload);
     payload = token ? await verify(token) : null;
     if (payload) localStorage.setItem(LS.token, token);
     else { localStorage.removeItem(LS.token); await dropPro(); }
-    if (before !== !!payload && typeof api.onChange === 'function') api.onChange();
+    if (before !== sig(payload) && typeof api.onChange === 'function') api.onChange(); // aj pri zmene stupňa alebo platnosti
   }
 
   async function call(path, data) {
@@ -1445,6 +1446,7 @@ const SKLicense = (() => {
     until: payload ? payload.until : null,   // dokedy funguje bez internetu
     message: api.isPro() ? '' : (localStorage.getItem(LS.msg) || ''), // prečo licencia neplatí
     freeLimit: FREE_LIMIT,
+    limit: payload && payload.limit > 0 ? payload.limit : 0, // stupeň licencie: max. počet zákazníkov (0 = neobmedzene)
   });
 
   api.refresh = refresh;
@@ -1453,7 +1455,7 @@ const SKLicense = (() => {
 
 function syncLic(){
   const i=SKLicense.info();
-  LIC={ valid:i.pro, limit:i.pro?Infinity:FREE_LIMIT, reason:i.message||'', key:i.key, exp:i.expiresAt, until:i.until, hasKey:!!i.key };
+  LIC={ valid:i.pro, limit:i.pro?(i.limit>0?i.limit:Infinity):FREE_LIMIT, reason:i.message||'', key:i.key, exp:i.expiresAt, until:i.until, hasKey:!!i.key };
   return LIC;
 }
 function fmtTs(ms){ return ms ? new Date(ms).toLocaleDateString('sk-SK') : '—'; }
@@ -1531,7 +1533,7 @@ function sellerHTML(){
     </div>`;
 }
 function showLimitModal(){
-  document.getElementById('licModalTitle').textContent='🔑 Limit bezplatnej verzie';
+  document.getElementById('licModalTitle').textContent=LIC.valid?'🔑 Limit tvojej licencie':'🔑 Limit bezplatnej verzie';
   const b=document.getElementById('licModalBody');
   b.innerHTML=`
     <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
@@ -1540,7 +1542,7 @@ function showLimitModal(){
     </div>
     <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
       Existujúcich zákazníkov môžeš ďalej prezerať a upravovať.
-      Na pridanie ďalších potrebuješ licenciu PRO.
+      Na pridanie ďalších potrebuješ ${LIC.valid?'vyšší stupeň licencie':'licenciu PRO'}.
     </div>
     <div style="background:rgba(6,214,160,.1);border:1px solid var(--accent3);border-radius:10px;padding:12px">
       <div style="color:var(--accent3);font-weight:600;margin-bottom:4px">Licenciu objednáš u</div>
@@ -1604,7 +1606,7 @@ function renderLicUI(){
       h=`<div style="font-weight:600;color:var(--accent3);margin-bottom:6px">✅ Licencia PRO aktívna</div>
          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
          Kľúč: …${esc((LIC.key||'').slice(-5))}<br>
-         Zákazníkov: ${used} / neobmedzene<br>
+         Zákazníkov: <span style="color:${LIC.limit!==Infinity&&used>=LIC.limit?'var(--danger)':'inherit'}">${used} / ${limitTxt()}</span><br>
          Platnosť: ${LIC.exp?'do '+fmtTs(LIC.exp):'bez obmedzenia'}<br>
          Bez internetu funguje do: ${fmtTs(LIC.until)}
          ${SKLicense.proReady()?'':'<br><span style="color:var(--warn)">Funkcie PRO sa ešte nestiahli — pripoj sa na internet.</span>'}</div>`;
@@ -1634,6 +1636,9 @@ function renderLicUI(){
     if(!LIC.valid && storageReady){
       const s=used>=FREE_LIMIT?'d':(used>=FREE_LIMIT-2?'w':'ok');
       parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, cenové ponuky, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+    }
+    if(LIC.valid && LIC.limit!==Infinity && used>=LIC.limit-2){
+      parts.push(`<div class="ai ${used>=LIC.limit?'d':'w'}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Licencia · ${used} / ${LIC.limit} zákazníkov</div><div class="ai-ds">${used>=LIC.limit?'Limit je vyčerpaný — ďalších pridáš po prechode na vyšší stupeň':'Blížiš sa k limitu svojej licencie'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     ban.innerHTML=parts.join('');
   }
