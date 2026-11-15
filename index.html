@@ -6,14 +6,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d1b2a">
 <title>ServisKotlov PRO</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <!-- ZXing barcode scanner -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <!-- SheetJS for Excel export -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Leaflet for map -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" media="print" onload="this.media='all'"/>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 :root {
   --bg:#0d1b2a; --surf:#132233; --surf2:#1a2e42; --surf3:#203550;
@@ -93,9 +93,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .ai-ds{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px;}
 
 /* ── OVERLAY / MODAL ── */
-.ov-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:none;align-items:flex-end;backdrop-filter:blur(5px);}
+.ov-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(5px);}
 .ov-bg.open{display:flex;}
-.modal{background:var(--surf);border-radius:20px 20px 0 0;padding:18px;width:100%;max-height:92vh;overflow-y:auto;border-top:1px solid var(--border);animation:slideUp .22s ease;}
+.modal{background:var(--surf);border-radius:20px 20px 0 0;padding:18px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;border-top:1px solid var(--border);animation:slideUp .22s ease;}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .mdrag{width:38px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px;}
 .mtitle{font-size:17px;font-weight:800;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}
@@ -321,7 +321,7 @@ select option{background:#132233;}
 .pv-hint{text-align:center;color:rgba(255,255,255,.55);font-family:var(--mono);font-size:10px;padding:0 16px 8px;background:rgba(0,0,0,.65);}
 
 /* ── TOAST ── */
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent3);color:var(--bg);padding:10px 24px;border-radius:20px;font-family:var(--mono);font-size:13px;font-weight:600;z-index:999;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--accent3);color:var(--bg);padding:10px 24px;border-radius:20px;font-family:var(--mono);font-size:13px;font-weight:600;z-index:999;opacity:0;transition:all .3s;pointer-events:none;width:max-content;max-width:calc(100vw - 32px);text-align:center;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 input[type="date"]{color-scheme:dark;}
 input[type="file"]{display:none;}
@@ -670,7 +670,7 @@ input[type="file"]{display:none;}
     <button class="mtab active" onclick="switchTab('dtab-info',this)">ℹ️ Info</button>
     <button class="mtab" onclick="switchTab('dtab-hist',this)">📋 História</button>
     <button class="mtab" onclick="switchTab('dtab-proto',this)">📄 Protokoly</button>
-    <button class="mtab" onclick="switchTab('dtab-inv',this)">💰 Faktúra</button>
+    <button class="mtab" onclick="switchTab('dtab-inv',this)">💰 Ponuka</button>
     <button class="mtab" onclick="switchTab('dtab-photos',this)">📸 Fotky</button>
   </div>
 
@@ -701,7 +701,7 @@ input[type="file"]{display:none;}
 
   <!-- DTAB: INVOICE -->
   <div class="mtab-content" id="dtab-inv">
-    <div class="stitle">💰 Kalkulácia / Faktúra</div>
+    <div class="stitle">💰 Cenové ponuky</div>
     <div id="invItems"></div>
     <button class="btn btn-s" style="margin-top:6px" onclick="addInvItem()">➕ Pridať položku</button>
     <div class="inv-sum">
@@ -716,8 +716,8 @@ input[type="file"]{display:none;}
         <div class="inv-sum-val" id="invTotal">0.00 €</div>
       </div>
     </div>
-    <button class="btn btn-p" style="margin-top:8px" onclick="printInvoice()">🖨️ Tlačiť faktúru (PDF)</button>
-    <button class="btn btn-s" style="margin-top:6px" onclick="saveInvoice()">💾 Uložiť kalkuláciu</button>
+    <button class="btn btn-p" style="margin-top:8px" onclick="printInvoice()">🖨️ Tlačiť ponuku (PDF)</button>
+    <button class="btn btn-s" style="margin-top:6px" onclick="saveInvoice()">💾 Uložiť ponuku</button>
   </div>
 
   <!-- DTAB: PHOTOS -->
@@ -844,7 +844,7 @@ input[type="file"]{display:none;}
   <div class="mdrag"></div>
   <div class="mtitle"><span id="licModalTitle">🔑 Limit bezplatnej verzie</span><button class="mclose" onclick="document.getElementById('licModal').classList.remove('open')">✕</button></div>
   <div id="licModalBody" style="font-family:var(--mono);font-size:12px;line-height:1.8;color:var(--text)"></div>
-  <button class="btn btn-p" style="margin-top:14px" onclick="document.getElementById('licModal').classList.remove('open');pg('settings')">🔑 Zadať licenčný kľúč</button>
+  <button class="btn btn-p" style="margin-top:14px" onclick="closeAllModals();pg('settings')">🔑 Zadať licenčný kľúč</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('licModal').classList.remove('open')">Zavrieť</button>
 </div>
 </div>
@@ -1098,6 +1098,20 @@ async function save(opts){
   }
 }
 
+// Uloží; ak sa to nepodarí, vráti v pamäti posledný uložený stav,
+// aby aplikácia neukazovala zmenu, ktorá po reštarte zmizne.
+async function saveOrRevert(opts){
+  const ok=await save(opts);
+  if(!ok){
+    if(!lastSaveReloaded){
+      if(DB) await reloadFromStorage();
+      else { try{ const a=JSON.parse(localStorage.getItem('sk2_custs')||'null'); if(Array.isArray(a)) custs=a; }catch(e){} }
+    }
+    renderDash(); renderCusts();
+  }
+  return ok;
+}
+
 // ── Súbeh viacerých okien / kariet ──────────────────────
 function bumpRev(){
   try{ localStorage.setItem('sk2_rev', Date.now().toString(36)+Math.random().toString(36).slice(2,6)); }catch(e){}
@@ -1182,7 +1196,7 @@ function saveSett(){localStorage.setItem('sk2_settings',JSON.stringify(settings)
 // ═══════════════════════════════════════════════
 const FREE_LIMIT = 10;
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
-const PRO_FEATURES = ['Neobmedzený počet zákazníkov','Servisné protokoly — tlač, PDF, e-mail','Faktúry a kalkulácie',
+const PRO_FEATURES = ['Neobmedzený počet zákazníkov','Servisné protokoly — tlač, PDF, e-mail','Cenové ponuky a kalkulácie',
   'Záloha na Google Drive a do priečinka','Export do Excelu, mapa zákazníkov, hromadné GPS'];
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
 
@@ -1565,11 +1579,11 @@ function proLock(id,what){
 }
 function renderMap(){ proLock('mapContainer','Mapa zákazníkov'); }
 function geocodeAll(){ needPro('Hromadné doplnenie GPS'); }
-function renderInvItems(){ proLock('invItems','Faktúry a kalkulácie'); }
+function renderInvItems(){ proLock('invItems','Cenové ponuky a kalkulácie'); }
 function calcInv(){}
-function addInvItem(){ needPro('Faktúry a kalkulácie'); }
-function saveInvoice(){ needPro('Faktúry a kalkulácie'); }
-function printInvoice(){ needPro('Faktúry a kalkulácie'); }
+function addInvItem(){ needPro('Cenové ponuky a kalkulácie'); }
+function saveInvoice(){ needPro('Cenové ponuky a kalkulácie'); }
+function printInvoice(){ needPro('Cenové ponuky a kalkulácie'); }
 function renderProtoList(){ proLock('protoList','Servisné protokoly'); }
 function openProtocol(){ needPro('Servisné protokoly'); }
 function printBlankProtocol(){ needPro('Servisné protokoly'); }
@@ -1615,11 +1629,11 @@ function renderLicUI(){
   const ban=document.getElementById('licBanner');
   if(ban){
     const parts=[];
-    if(!settings.firma) parts.push(`<div class="ai w" onclick="pg('settings')"><div class="ai-ic">🏢</div><div class="ai-tx"><div class="ai-nm">Vyplň údaje svojej firmy</div><div class="ai-ds">Zobrazia sa v hlavičke protokolov a faktúr · Nastavenia</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+    if(!settings.firma) parts.push(`<div class="ai w" onclick="pg('settings')"><div class="ai-ic">🏢</div><div class="ai-tx"><div class="ai-nm">Vyplň údaje svojej firmy</div><div class="ai-ds">Zobrazia sa v hlavičke protokolov a cenových ponúk · Nastavenia</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     if(hasDemo) parts.push(`<div class="ai ok" onclick="pg('settings')"><div class="ai-ic">🧪</div><div class="ai-tx"><div class="ai-nm">Zobrazujú sa ukážkoví zákazníci</div><div class="ai-ds">Odstrániš ich v Nastaveniach · do limitu sa nepočítajú</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     if(!LIC.valid && storageReady){
       const s=used>=FREE_LIMIT?'d':(used>=FREE_LIMIT-2?'w':'ok');
-      parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, faktúry, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+      parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, cenové ponuky, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     ban.innerHTML=parts.join('');
   }
@@ -1681,8 +1695,10 @@ async function bootStorage(){
   if(DB){
     try{
       const fromIdb = await idbGet('custs');
-      if(Array.isArray(fromIdb) && fromIdb.length){
-        custs = fromIdb;                                // bežný štart
+      if(Array.isArray(fromIdb) && (fromIdb.length || maMarker)){
+        // bežný štart; prázdny zoznam = používateľ všetko sám vymazal
+        // (systémom vymazané úložisko vráti undefined, nie [])
+        custs = fromIdb;
         try{ localStorage.setItem('sk2_idb','1'); }catch(e){}
       } else if(maMarker){
         // Úložisko tu dáta malo a teraz je prázdne — systém ich pravdepodobne
@@ -1758,8 +1774,10 @@ function devName(d){ return [d.boilerBrand,d.model].filter(Boolean).join(' · ')
 function devLabel(d){ return (d.place?d.place+' – ':'')+devName(d); }
 function devShort(c,id){
   if(id==='ALL') return 'všetky zariadenia';
-  const l=devList(c), i=l.findIndex(d=>d.id===(id||'main')); const d=l[i<0?0:i];
-  return (i<0?1:i+1)+'. '+(d.place||d.boilerBrand||'zariadenie');
+  const l=devList(c), i=l.findIndex(d=>d.id===(id||'main'));
+  if(i<0) return 'odstránené zariadenie';
+  const d=l[i];
+  return (i+1)+'. '+(d.place||d.boilerBrand||'zariadenie');
 }
 function effNext(c){ const ds=devList(c).map(d=>d.nextService).filter(isISO).sort(); return ds[0]||''; }
 function dueDev(c){ const l=devList(c).filter(d=>isISO(d.nextService)).sort((a,b)=>a.nextService.localeCompare(b.nextService)); return l[0]||devList(c)[0]; }
@@ -1884,9 +1902,10 @@ function getDaysText(c){
   const nx=effNext(c);
   if(!isISO(nx))return'—';
   const d=daysUntil(nx);
-  if(d<0)return`Po termíne ${Math.abs(d)} dní`;
-  if(d===0)return'DNES ❗'; return`Za ${d} dní`;
+  if(d<0)return'Po termíne '+dniTxt(Math.abs(d));
+  if(d===0)return'DNES ❗'; return'Za '+dniTxt(d);
 }
+function dniTxt(n){ return n+' '+(n===1?'deň':(n>=2&&n<=4?'dni':'dní')); }
 function fmt(d){if(!isISO(d))return'—';const[y,m,day]=d.split('-');return`${day}.${m}.${y}`;}
 function stLabel(s){return{ov:'PO TERMÍNE',d:'< 7 DNÍ',w:'< 30 DNÍ',ok:'V PORIADKU',none:'BEZ DÁTUMU'}[s]||'—';}
 function stColor(s){return{ov:'var(--danger)',d:'var(--danger)',w:'var(--warn)',ok:'var(--accent3)',none:'var(--muted)'}[s]||'var(--muted)';}
@@ -2109,7 +2128,12 @@ async function saveCust(){
     history:existing?existing.history:[],
     invoice:existing?existing.invoice:[],
   };
-  if(existing && existing.demo) c.demo=true;
+  if(existing && existing.demo && DEMO_NAMES.includes(name)) c.demo=true; else delete c.demo;
+  { const iv=settings.interval||12;
+    if(!editId && !c.nextService && isISO(c.lastService)) c.nextService=addMonthsISO(c.lastService,iv);
+    const oldDev=new Set(((existing&&existing.devices)||[]).map(d=>d.id));
+    c.devices.forEach(d=>{ if(!oldDev.has(d.id) && !d.nextService && isISO(d.lastService)) d.nextService=addMonthsISO(d.lastService,iv); });
+  }
   // GPS sa NIKDY nemení automaticky — iba cez tlačidlá v záložke GPS
   c.geoAddr = existing ? (existing.geoAddr||'') : '';
 
@@ -2127,10 +2151,12 @@ async function saveCust(){
   const np=(c.photos||[]).length;
   showToast((editId ? '✅ Údaje upravené' : '✅ Zákazník uložený') + (np?'  ·  fotiek: '+np:''));
 }
-function delCust(){
+async function delCust(){
   if(!confirm('Naozaj vymazať?'))return;
+  const prevAll=custs;
   custs=custs.filter(x=>x.id!==editId);
-  save({allowLess:true, allowEmpty:true}); closeCM(); renderCusts(); renderDash(); showToast(editId ? '✅ Údaje upravené' : '✅ Zákazník uložený');
+  if(!(await save({allowLess:true, allowEmpty:true}))){ if(!lastSaveReloaded) custs=prevAll; renderCusts(); renderDash(); return; }
+  closeCM(); renderCusts(); renderDash(); showToast('🗑️ Zákazník vymazaný','var(--warn)');
 }
 
 // ═══════════════════════════════════════════════
@@ -2221,14 +2247,15 @@ function closeDM(){document.getElementById('detailModal').classList.remove('open
 function editFromDetail(){openEdit(detailId);}
 function markServiced(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
-  const run=ids=>{
+  const run=async ids=>{
     const today=todayISO();
     const nx=addMonthsISO(today, settings.interval||12);
     ids.forEach(id=>setDevDates(c,id,today,nx));
     c.history=c.history||[];
     c.history.unshift({id:uid(),date:today,type:'Ročná prehliadka',desc:ids.length>1?'Servis vykonaný (všetky zariadenia).':'Servis vykonaný.',
       labor:0,parts:0,tech:settings.name||'',devId:ids.length>1?'ALL':ids[0]});
-    save(); closeDM(); renderCusts(); renderDash();
+    if(!(await saveOrRevert())) return;
+    closeDM(); renderCusts(); renderDash();
     showToast('✅ Servis zaznamenaný · ďalší: '+fmt(nx));
   };
   if(!hasMulti(c)) return run(['main']);
@@ -2337,7 +2364,7 @@ function openAddHistory(){
   document.getElementById('histModal').classList.add('open');
 }
 function closeHM(){editHistId=null;document.getElementById('histModalTitle').textContent='Servisný záznam';document.getElementById('histModal').classList.remove('open');}
-function saveHistory(){
+async function saveHistory(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
   c.history=c.history||[];
   const type=document.getElementById('hType').value;
@@ -2369,7 +2396,7 @@ function saveHistory(){
     setDevDates(c, histDevVal(), date, addMonthsISO(date, settings.interval||12));
   }
 
-  save(); closeHM(); renderHistList(); renderCusts(); renderDash();
+  const okH=await saveOrRevert(); closeHM(); renderHistList(); if(!okH) return; renderCusts(); renderDash();
 }
 
 let editHistId = null;
@@ -2389,11 +2416,11 @@ function editHistEntry(hid){
   document.getElementById('histModal').classList.add('open');
 }
 
-function delHistEntry(hid){
+async function delHistEntry(hid){
   if(!confirm('Vymazať tento servisný záznam?'))return;
   const c=custs.find(x=>x.id===detailId); if(!c)return;
   c.history=c.history.filter(x=>x.id!==hid);
-  save(); renderHistList(); renderCusts(); renderDash();
+  await saveOrRevert(); renderHistList(); renderCusts(); renderDash();
 }
 
 // ═══════════════════════════════════════════════
@@ -2532,8 +2559,33 @@ function renderLogoPrev(){
 function uploadLogo(e){
   const f=e.target.files&&e.target.files[0]; if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{settings.logo=ev.target.result;saveSett();renderLogoPrev();showToast('✅ Logo uložené');};
+  r.onload=async ev=>{
+    const old=settings.logo;
+    try{
+      settings.logo=await shrinkLogo(ev.target.result);
+      saveSett(); renderLogoPrev(); showToast('✅ Logo uložené');
+    }catch(err){
+      settings.logo=old; renderLogoPrev();
+      alert('❌ Logo sa nepodarilo uložiť — obrázok je príliš veľký alebo poškodený.');
+    }
+  };
   r.readAsDataURL(f); e.target.value='';
+}
+// Zmenší logo na max. 800 px (PNG, priehľadnosť zostane) — nastavenia sú v localStorage (limit ~5 MB)
+function shrinkLogo(dataURL){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const k=Math.min(1,800/Math.max(img.width,img.height));
+      if(k===1 && dataURL.length<300000){ resolve(dataURL); return; }
+      const cv=document.createElement('canvas');
+      cv.width=Math.max(1,Math.round(img.width*k)); cv.height=Math.max(1,Math.round(img.height*k));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      resolve(cv.toDataURL('image/png'));
+    };
+    img.onerror=()=>reject(new Error('obrázok'));
+    img.src=dataURL;
+  });
 }
 function clearLogo(){settings.logo='';saveSett();renderLogoPrev();showToast('Logo odstránené','var(--warn)');}
 
@@ -2619,7 +2671,8 @@ function navToCust(id){
   // bez GPS naviguj priamo na text adresy — súradnice sa neukladajú samé
   const q=encodeURIComponent([c.addr,c.psc,c.city,'Slovensko'].filter(Boolean).join(', '));
   const app = settings.navApp || 'auto';
-  const url = (app==='apple' || (app==='auto' && isIOS()))
+  const url = app==='waze' ? 'https://waze.com/ul?q='+q+'&navigate=yes'
+    : (app==='apple' || (app==='auto' && isIOS()))
     ? 'https://maps.apple.com/?daddr='+q+'&dirflg=d'
     : 'https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving';
   window.open(url,'_blank');
@@ -2672,6 +2725,7 @@ function normalizeCusts(arr){
     o.invoice=objs(o.invoice).map(i=>({desc:String(i.desc==null?'':i.desc),qty:parseFloat(i.qty)||1,price:parseFloat(i.price)||0}));
     if(o.protocols!==undefined) o.protocols=objs(o.protocols).map(p=>({...p,id:safeId(p.id)}));
     if(o.devices!==undefined) o.devices=objs(o.devices).map(d=>({...d,id:safeId(d.id)}));
+    if(o.quotes!==undefined) o.quotes=objs(o.quotes).map(q=>({...q,id:safeId(q.id),items:objs(q.items)}));
     o.lat=parseFloat(o.lat)||null; o.lng=parseFloat(o.lng)||null;
     return o;
   });
@@ -2691,6 +2745,7 @@ function mergeSettings(s){
   ['logo','stamp'].forEach(k=>{ if(n[k] && !(typeof n[k]==='string'&&IMG_RE.test(n[k]))) n[k]=''; });
   if(settings.driveClientId) n.driveClientId=settings.driveClientId;       // Client ID patrí zariadeniu
   n.protoSeq=Math.max(parseInt(settings.protoSeq)||0, parseInt(n.protoSeq)||0);  // číslovanie nikdy nejde späť
+  n.quoteSeq=Math.max(parseInt(settings.quoteSeq)||0, parseInt(n.quoteSeq)||0);
   settings=n;
   try{ saveSett(); }catch(e){ console.error(e); }
 }
@@ -2900,8 +2955,7 @@ async function openScanner(cb){
     }
 
   } catch(e){
-    overlay.style.display = 'none';
-    scannerActive = false;
+    closeScanner();          // vypne aj kameru, ak sa už stihla zapnúť
     useCameraPhoto();
   }
 }
@@ -2950,6 +3004,15 @@ async function scanFromPhoto(e){
         return;
       }
     } catch(e){ console.error(e); }
+  }
+  if(window.ZXing){
+    const url=URL.createObjectURL(file);
+    try{
+      const hints=new Map(); hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      const res=await new ZXing.BrowserMultiFormatReader(hints).decodeFromImageUrl(url);
+      if(res){ deliverScan(res.getText()); return; }
+    }catch(e){ console.warn('ZXing foto',e); }
+    finally{ URL.revokeObjectURL(url); }
   }
   // No BarcodeDetector — ask manual
   const val = prompt('Automatické skenovanie nie je k dispozícii.\nZadaj DSN / sériové číslo ručne:');
