@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ServisKotlov PRO – kontakt</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0d1b2a; color: #dff0ff; font-family: system-ui, sans-serif; text-align: center; padding: 24px; }
+  h1 { font-size: 26px; margin: 0 0 8px; } h1 em { color: #00b4d8; font-style: normal; }
+  p { color: #8fb0cf; margin: 0 0 24px; line-height: 1.5; }
+  a.btn { display: block; padding: 16px 28px; border-radius: 12px; font-size: 17px; font-weight: 700; text-decoration: none; margin: 10px auto; max-width: 320px; }
+  #mail { background: #00b4d8; color: #0d1b2a; } #app { border: 1px solid #2a3f58; color: #dff0ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Servis<em>Kotlov</em> PRO</h1>
+  <p>Máš otázku alebo záujem o licenciu?<br>Ťukni a otvorí sa ti e-mail.</p>
+  <a class="btn" id="mail" href="#">Napísať e-mail</a>
+  <a class="btn" id="app" href="https://serviskotlov.github.io/">Otvoriť aplikáciu</a>
+</main>
+<script>
+  // adresa sa skladá až tu, na stránke nie je nikde vypísaná
+  var a = ['adrian.kramer', 'seznam.cz'].join('@');
+  var href = 'mai' + 'lto:' + a + '?subject=' + encodeURIComponent('ServisKotlov PRO');
+  document.getElementById('mail').addEventListener('click', function (e) { e.preventDefault(); location.href = href; });
+</script>
+</body>
+</html>
