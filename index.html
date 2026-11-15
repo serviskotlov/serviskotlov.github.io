@@ -399,7 +399,7 @@ input[type="file"]{display:none;}
 <div class="pg" id="page-settings">
   <div class="stitle">🔑 Licencia</div>
   <div id="licBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
-  <div class="fg"><label class="fl">Licenčný kľúč</label><input class="fi" id="licInput" placeholder="SKP-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-family:var(--mono);font-size:13px"></div>
+  <div class="fg"><label class="fl">Licenčný kľúč</label><textarea class="fta" id="licInput" placeholder="SK1.xxxxx.yyyyy" style="font-family:var(--mono);font-size:11px;min-height:64px"></textarea></div>
   <button class="btn btn-p" onclick="activateLicense()">🔓 Aktivovať licenciu</button>
   <button class="btn btn-s" id="licRemoveBtn" style="margin-top:6px;display:none" onclick="removeLicense()">Odstrániť licenciu z tohto zariadenia</button>
   <button class="btn btn-o" id="demoRemoveBtn" style="margin-top:6px;display:none" onclick="removeDemo()">🧪 Odstrániť ukážkových zákazníkov</button>
@@ -463,8 +463,6 @@ input[type="file"]{display:none;}
 
   <div class="stitle">☁️ Google Drive záloha</div>
 
-  <div data-free style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">🔒 Záloha na Google Drive je súčasťou verzie PRO.<br>Ručný <b style="color:var(--text)">Export JSON</b> nižšie funguje vždy.</div>
-  <div id="driveWrap" data-pro style="display:none">
   <!-- Drive status card -->
   <div id="driveStatusCard" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
@@ -491,7 +489,6 @@ input[type="file"]{display:none;}
   <button class="btn btn-o" id="driveBackupBtn" style="margin-top:6px;display:none" onclick="driveBackup()">☁️ Zálohovať teraz do Google Drive</button>
   <button class="btn btn-s" id="driveRestoreBtn" style="margin-top:6px;display:none" onclick="driveRestore()">⬇️ Obnoviť zálohu z Google Drive</button>
   <button class="btn btn-d" id="driveDisconnectBtn" style="margin-top:6px;display:none" onclick="driveDisconnect()">🔌 Odpojiť Google Drive</button>
-  </div>
 
   <!-- Drive Help Modal trigger -->
   <div class="stitle">📦 Export / Import</div>
@@ -842,7 +839,7 @@ input[type="file"]{display:none;}
 <div class="ov-bg" id="licModal">
 <div class="modal">
   <div class="mdrag"></div>
-  <div class="mtitle"><span id="licModalTitle">🔑 Limit bezplatnej verzie</span><button class="mclose" onclick="document.getElementById('licModal').classList.remove('open')">✕</button></div>
+  <div class="mtitle"><span>🔑 Limit bezplatnej verzie</span><button class="mclose" onclick="document.getElementById('licModal').classList.remove('open')">✕</button></div>
   <div id="licModalBody" style="font-family:var(--mono);font-size:12px;line-height:1.8;color:var(--text)"></div>
   <button class="btn btn-p" style="margin-top:14px" onclick="document.getElementById('licModal').classList.remove('open');pg('settings')">🔑 Zadať licenčný kľúč</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('licModal').classList.remove('open')">Zavrieť</button>
@@ -1176,306 +1173,120 @@ async function updateStorageUI(){
 function saveSett(){localStorage.setItem('sk2_settings',JSON.stringify(settings));}
 
 // ═══════════════════════════════════════════════
-// LICENCIA — bezplatne 10 zákazníkov a základné funkcie.
-// Verzia PRO: kľúč sa aktivuje na licenčnom serveri (obmedzený počet zariadení).
-// Kód platených funkcií NIE JE v tomto súbore — server ho vydá až po aktivácii.
+// LICENCIA — bezplatne 10 zákazníkov, viac s licenčným kľúčom
+// Kľúč je podpísaný súkromným kľúčom predajcu (ECDSA P-256).
+// Aplikácia obsahuje len verejný kľúč, takže kľúč vie overiť, ale nie vyrobiť.
 // ═══════════════════════════════════════════════
 const FREE_LIMIT = 10;
+const LIC_PUBKEY = {"kty":"EC","crv":"P-256","x":"jHq6jjFBOFnyixwtu2xvyrCd6zp8QSYoCMoCp5jU7RE","y":"dUFMhCurQ7Wt1tsqVWK9mM0y40oHWPZFSx0yFRxt6h8"};
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
-const PRO_FEATURES = ['Neobmedzený počet zákazníkov','Servisné protokoly — tlač, PDF, e-mail','Faktúry a kalkulácie',
-  'Záloha na Google Drive a do priečinka','Export do Excelu, mapa zákazníkov, hromadné GPS'];
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
+// Adresa servera pre online aktiváciu (Cloudflare Worker). Prázdne = len offline overenie.
+const LIC_API = '';
+const LIC_RECHECK_DAYS = 3;   // ako často sa licencia overí online (keď je internet)
+const LIC_GRACE_DAYS   = 30;  // koľko dní funguje licencia bez overenia (bez signálu)
 
-const SKLicense = (() => {
-  const SERVER = 'https://https://serviskotlov-licencie-v2.gappa1972.workers.dev/;          // <- adresa Workera
-  const PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: 'rILudfx8BtGNqqMheZYQ0Xd7OGkXVJNghgwjMMK_QVw', y: '2pflPOJUtYpr7wWuS4gE6A8hLMQegFLIFBVfurhoarc' }; // <- verejný kľúč z keygen.html
-  const FREE_LIMIT = 10;
-  const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
+function daysSince(iso){ if(!iso) return 9999; return Math.floor((new Date(todayISO())-new Date(iso))/86400000); }
+function deviceId(){
+  let d=localStorage.getItem('sk2_device');
+  if(!d){ d=(uid()+uid()).replace(/[^\w-]/g,''); localStorage.setItem('sk2_device',d); }
+  return d;
+}
+function deviceLabel(){
+  const u=navigator.userAgent;
+  const os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows':/Mac/.test(u)?'Mac':/Linux/.test(u)?'Linux':'Zariadenie';
+  const br=/Edg\//.test(u)?'Edge':/CriOS|Chrome\//.test(u)?'Chrome':/FxiOS|Firefox\//.test(u)?'Firefox':/Safari\//.test(u)?'Safari':'';
+  return os+(br?' · '+br:'');
+}
+function getAct(){ try{ return JSON.parse(localStorage.getItem('sk2_lic_act')||'null'); }catch(e){ return null; } }
+async function licApi(path, body){
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const r=await fetch(LIC_API.replace(/\/+$/,'')+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
 
-  const LS = { key: 'sk_lic_key', token: 'sk_lic_token', dev: 'sk_lic_device', checked: 'sk_lic_checked', msg: 'sk_lic_msg' };
-  const MESSAGES = {
-    invalid_key: 'Licenčný kľúč nie je platný.',
-    revoked: 'Táto licencia bola zrušená.',
-    expired: 'Platnosť licencie vypršala.',
-    device_limit: 'Licencia je už aktivovaná na maximálnom počte zariadení. Deaktivujte ju na inom zariadení.',
-    device_not_active: 'Toto zariadenie už nie je aktivované. Zadajte kľúč znova.',
-    network: 'Server nie je dostupný. Skontrolujte pripojenie na internet.',
-    no_server: 'Licenčný server ešte nie je nastavený.',
-  };
-  const FATAL = ['invalid_key', 'revoked', 'expired', 'device_not_active'];
-
-  let payload = null; // overený obsah tokenu, alebo null
-  let pubKey = null;
-  let proVersion = null; // verzia práve spusteného PRO modulu
-  const api = { onChange: null, onProLoaded: null };
-
-  // malé úložisko v IndexedDB pre PRO modul (localStorage nechávame na dáta aplikácie)
-  const store = {
-    db: null,
-    open() {
-      return this.db || (this.db = new Promise((res, rej) => {
-        const r = indexedDB.open('sk_license', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('kv');
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      }));
-    },
-    async tx(mode, fn) {
-      const db = await this.open();
-      return new Promise((res, rej) => {
-        const t = db.transaction('kv', mode);
-        const r = fn(t.objectStore('kv'));
-        t.oncomplete = () => res(r.result === undefined ? null : r.result);
-        t.onerror = () => rej(t.error);
-      });
-    },
-    get(k) { return this.tx('readonly', (s) => s.get(k)); },
-    set(k, v) { return this.tx('readwrite', (s) => s.put(v, k)); },
-    del(k) { return this.tx('readwrite', (s) => s.delete(k)); },
-  };
-  api._store = store;
-
-  function runModule(mod) {
-    if (!mod || !mod.code || proVersion) return; // novšia verzia sa použije pri ďalšom štarte
-    try {
-      globalThis.SKPro = null;
-      if (typeof document !== 'undefined' && document.head) {
-        // ako bežný <script>: funkcie modulu vidí aj onclick v HTML
-        const s = document.createElement('script');
-        s.textContent = mod.code;
-        document.head.appendChild(s);
-        s.remove();
-      } else {
-        new Function(mod.code)();
+function b64uToBytes(s){
+  s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='=';
+  const bin=atob(s); const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i); return u;
+}
+async function verifyLicenseKey(key){
+  key=(key||'').replace(/\s+/g,'');
+  const parts=key.split('.');
+  if(parts.length!==3||parts[0]!=='SK1') return {ok:false, reason:'Neplatný formát kľúča'};
+  if(!(window.crypto&&crypto.subtle)) return {ok:false, reason:'Prehliadač nevie overiť kľúč (otvor aplikáciu cez https://)'};
+  let payload;
+  try{ payload=JSON.parse(new TextDecoder().decode(b64uToBytes(parts[1]))); }catch(e){ return {ok:false, reason:'Poškodený kľúč'}; }
+  try{
+    const pk=await crypto.subtle.importKey('jwk',LIC_PUBKEY,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
+    const ok=await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},pk,b64uToBytes(parts[2]),new TextEncoder().encode(parts[0]+'.'+parts[1]));
+    if(!ok) return {ok:false, reason:'Kľúč nie je platný'};
+  }catch(e){ return {ok:false, reason:'Kľúč sa nepodarilo overiť'}; }
+  if(payload.x){
+    const today=todayISO();
+    if(payload.x<today) return {ok:false, expired:true, payload, reason:'Platnosť licencie skončila '+fmt(payload.x)};
+  }
+  return {ok:true, payload};
+}
+async function computeLicense(){
+  const key=localStorage.getItem('sk2_license')||'';
+  if(!key){ LIC={valid:false, limit:FREE_LIMIT, reason:''}; return LIC; }
+  const r=await verifyLicenseKey(key);
+  if(!r.ok){
+    LIC={valid:false, limit:FREE_LIMIT, reason:r.reason, expired:!!r.expired, name:(r.payload||{}).n||'', hasKey:true};
+    return LIC;
+  }
+  const p=r.payload;
+  LIC={valid:true, limit:p.l?Number(p.l):Infinity, name:p.n||'', email:p.e||'', exp:p.x||'', reason:'', hasKey:true};
+  if(LIC_API){
+    const act=getAct();
+    if(!act || act.key!==key){
+      LIC={valid:false, limit:FREE_LIMIT, name:p.n||'', hasKey:true, needsActivation:true,
+           reason:localStorage.getItem('sk2_lic_msg')||'Licencia nie je aktivovaná na tomto zariadení — ťukni na Aktivovať (treba internet)'};
+    } else {
+      LIC.lastCheck=act.last;
+      if(daysSince(act.last)>LIC_GRACE_DAYS){
+        LIC={valid:false, limit:FREE_LIMIT, name:p.n||'', hasKey:true, needsActivation:true,
+             reason:'Licenciu treba overiť cez internet (naposledy '+fmt(act.last)+'). Pripoj sa a otvor aplikáciu znova.'};
       }
-      if (!globalThis.SKPro) throw new Error('modul sa nenačítal celý');
-      proVersion = mod.version;
-    } catch (e) {
-      console.error('PRO modul sa nepodarilo spustiť', e);
-      api._store.del('pro').catch(() => {}); // pri ďalšom overení sa stiahne znova
-      return;
-    }
-    if (typeof api.onProLoaded === 'function') {
-      try { api.onProLoaded(); } catch (e) { console.error(e); }
     }
   }
-
-  async function loadPro() {
-    if (!api.isPro()) return false;
-    try { runModule(await api._store.get('pro')); } catch (_) {}
-    return api.proReady();
-  }
-
-  async function syncPro() {
-    if (!api.isPro()) return;
-    let cached = null;
-    try { cached = await api._store.get('pro'); } catch (_) {}
-    const r = await call('/module', {
-      key: localStorage.getItem(LS.key), deviceId: deviceId(), have: cached ? cached.version : '',
-    });
-    if (r.ok && r.code) {
-      const mod = { version: r.version, code: r.code };
-      try { await api._store.set('pro', mod); } catch (_) {}
-      runModule(mod);
-    } else if (cached) {
-      runModule(cached);
-    }
-  }
-
-  async function dropPro() {
-    try { await api._store.del('pro'); } catch (_) {}
-    globalThis.SKPro = null;
-    proVersion = null;
-  }
-
-  function deviceId() {
-    let id = localStorage.getItem(LS.dev);
-    if (!id) {
-      id = crypto.randomUUID ? crypto.randomUUID()
-        : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
-      localStorage.setItem(LS.dev, id);
-    }
-    return id;
-  }
-
-  function deviceName() {
-    const ua = navigator.userAgent || '';
-    if (/iPhone/.test(ua)) return 'iPhone';
-    if (/iPad/.test(ua)) return 'iPad';
-    if (/Android/.test(ua)) return 'Android';
-    if (/Windows/.test(ua)) return 'Windows PC';
-    if (/Mac/.test(ua)) return 'Mac';
-    return 'Zariadenie';
-  }
-
-  function unb64url(s) {
-    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  }
-
-  async function verify(token) {
-    try {
-      const [p, s] = String(token || '').split('.');
-      if (!p || !s) return null;
-      pubKey = pubKey || await crypto.subtle.importKey(
-        'jwk', PUBLIC_JWK, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-      const data = unb64url(p);
-      const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pubKey, unb64url(s), data);
-      if (!ok) return null;
-      const pl = JSON.parse(new TextDecoder().decode(data));
-      if (pl.plan !== 'pro' || pl.dev !== deviceId() || !(pl.until > Date.now())) return null;
-      return pl;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  async function setToken(token) {
-    const before = !!payload;
-    payload = token ? await verify(token) : null;
-    if (payload) localStorage.setItem(LS.token, token);
-    else { localStorage.removeItem(LS.token); await dropPro(); }
-    if (before !== !!payload && typeof api.onChange === 'function') api.onChange();
-  }
-
-  async function call(path, data) {
-    if (/VAS-WORKER/.test(SERVER)) return { ok: false, error: 'no_server' };
-    let res;
-    try {
-      res = await fetch(SERVER + path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-    } catch (_) {
-      return { ok: false, error: 'network' };
-    }
-    try { return await res.json(); } catch (_) { return { ok: false, error: 'network' }; }
-  }
-
-  async function refresh() {
-    const key = localStorage.getItem(LS.key);
-    if (!key) return;
-    const r = await call('/validate', { key, deviceId: deviceId() });
-    if (r.ok) {
-      localStorage.setItem(LS.checked, String(Date.now()));
-      await setToken(r.token);
-      await syncPro();
-    } else if (FATAL.includes(r.error)) {
-      localStorage.setItem(LS.msg, MESSAGES[r.error]);
-      await setToken(null); // licencia skončila -> bezplatný režim (dáta zostávajú)
-    } // pri výpadku siete necháme pôvodný token, kým mu nevyprší platnosť
-  }
-
-  api.init = async function () {
-    payload = await verify(localStorage.getItem(LS.token));
-    if (payload) await loadPro(); // z úložiska zariadenia, funguje aj offline
-    else if (localStorage.getItem(LS.token)) { localStorage.removeItem(LS.token); await dropPro(); }
-    const last = Number(localStorage.getItem(LS.checked) || 0);
-    if (localStorage.getItem(LS.key) && Date.now() - last > CHECK_EVERY) {
-      refresh(); // na pozadí, štart aplikácie nezdržiava
-    } else if (api.isPro() && !api.proReady()) {
-      syncPro();
-    }
-    return api.isPro();
-  };
-
-  api.isPro = () => !!payload && payload.until > Date.now();
-
-  api.proReady = () => api.isPro() && !!globalThis.SKPro;
-
-  api.canAddCustomer = (currentCount) => api.isPro() || currentCount < FREE_LIMIT;
-
-  api.activate = async function (rawKey) {
-    const key = String(rawKey || '').toUpperCase().replace(/\s+/g, '');
-    const r = await call('/activate', { key, deviceId: deviceId(), deviceName: deviceName() });
-    if (!r.ok) return { ok: false, message: MESSAGES[r.error] || 'Aktivácia zlyhala (' + r.error + ').' };
-    localStorage.setItem(LS.key, key);
-    localStorage.setItem(LS.checked, String(Date.now()));
-    localStorage.removeItem(LS.msg);
-    await setToken(r.token);
-    await syncPro();
-    return api.isPro()
-      ? { ok: true, message: 'Licencia PRO je aktivovaná.' }
-      : { ok: false, message: 'Odpoveď servera sa nepodarilo overiť.' };
-  };
-
-  api.deactivate = async function () {
-    const key = localStorage.getItem(LS.key);
-    if (key) {
-      const r = await call('/deactivate', { key, deviceId: deviceId() });
-      if (!r.ok) return { ok: false, message: MESSAGES.network };
-    }
-    await api.forget();
-    return { ok: true, message: 'Licencia bola na tomto zariadení deaktivovaná.' };
-  };
-
-  // odstráni licenciu len z tohto zariadenia (bez spojenia so serverom)
-  api.forget = async function () {
-    localStorage.removeItem(LS.key);
-    localStorage.removeItem(LS.checked);
-    localStorage.removeItem(LS.msg);
-    await setToken(null);
-  };
-
-  // denné overenie na pozadí, napr. pri návrate do aplikácie
-  api.maybeRefresh = function () {
-    const last = Number(localStorage.getItem(LS.checked) || 0);
-    if (localStorage.getItem(LS.key) && Date.now() - last > CHECK_EVERY) refresh();
-  };
-
-  api.info = () => ({
-    pro: api.isPro(),
-    key: localStorage.getItem(LS.key) || '',
-    expiresAt: payload ? payload.exp : null, // koniec licencie (null = bez obmedzenia)
-    until: payload ? payload.until : null,   // dokedy funguje bez internetu
-    message: api.isPro() ? '' : (localStorage.getItem(LS.msg) || ''), // prečo licencia neplatí
-    freeLimit: FREE_LIMIT,
-  });
-
-  api.refresh = refresh;
-  return api;
-})();
-
-function syncLic(){
-  const i=SKLicense.info();
-  LIC={ valid:i.pro, limit:i.pro?Infinity:FREE_LIMIT, reason:i.message||'', key:i.key, exp:i.expiresAt, until:i.until, hasKey:!!i.key };
   return LIC;
-}
-function fmtTs(ms){ return ms ? new Date(ms).toLocaleDateString('sk-SK') : '—'; }
-function licTag(){
-  return 'ServisKotlov PRO · '+(LIC.valid?('licencia …'+(LIC.key||'').slice(-5)):'bezplatná verzia');
-}
-// Zobrazí / skryje časti rozhrania podľa toho, či je načítaný PRO modul
-function applyProUI(){
-  const pro=SKLicense.proReady();
-  document.querySelectorAll('[data-pro]').forEach(e=>e.style.display=pro?'':'none');
-  document.querySelectorAll('[data-free]').forEach(e=>e.style.display=pro?'none':'');
 }
 async function checkLicense(){
-  SKLicense.onChange=()=>{ syncLic(); renderLicUI(); applyProUI(); };
-  SKLicense.onProLoaded=afterProLoaded;
-  await SKLicense.init();
-  syncLic(); renderLicUI(); applyProUI();
-  // návrat z Google prihlásenia bez PRO modulu: token nenechávame v adrese
-  if(!SKLicense.proReady() && location.hash.indexOf('access_token')>-1) history.replaceState(null,'',location.pathname);
+  await computeLicense();
+  renderLicUI();
+  maybeOnlineCheck();
   return LIC;
 }
-// PRO modul sa práve spustil — prekresli časti, ktoré doteraz ukazovali zámok
-function afterProLoaded(){
-  syncLic(); applyProUI(); renderLicUI();
-  const mc=document.getElementById('mapContainer'); if(mc && !map) mc.innerHTML='';
-  try{ handleOAuthRedirect(); }catch(e){ console.error(e); }
-  try{ renderDriveDiag(); loadDriveSettings(); updateFolderUI(); }catch(e){ console.error(e); }
+// Overenie na serveri — na pozadí, nikdy nezablokuje prácu bez signálu
+let licChecking=false;
+async function maybeOnlineCheck(force){
+  if(!LIC_API || licChecking) return;
+  const key=localStorage.getItem('sk2_license'); const act=getAct();
+  if(!key || !act || act.key!==key) return;
+  if(!force && daysSince(act.last)<LIC_RECHECK_DAYS) return;
+  if(navigator.onLine===false) return;
+  licChecking=true;
   try{
-    if(detailId && document.getElementById('detailModal').classList.contains('open')){
-      renderProtoList();
-      if(document.getElementById('dtab-inv').classList.contains('active')) renderInvItems();
+    const res=await licApi('/check',{key, device:deviceId()});
+    if(res && res.ok){
+      act.last=todayISO(); localStorage.setItem('sk2_lic_act',JSON.stringify(act));
+    } else if(res && res.deny){
+      localStorage.removeItem('sk2_lic_act');
+      localStorage.setItem('sk2_lic_msg',res.reason||'Licencia nie je platná');
+      showToast('⚠️ '+(res.reason||'Licencia nie je platná'),'var(--danger)');
     }
-    if(document.getElementById('page-map').classList.contains('active')) renderMap();
-  }catch(e){ console.error(e); }
+    await computeLicense(); renderLicUI();
+  }catch(e){ /* bez internetu — skúsi sa nabudúce */ }
+  finally{ licChecking=false; }
 }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) SKLicense.maybeRefresh(); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) maybeOnlineCheck(); });
+function licTag(){
+  return 'ServisKotlov PRO · '+(LIC.valid?('licencia: '+(LIC.name||LIC.email||'—')):'bezplatná verzia');
+}
 
 // ── Kontrola limitu pri importe / obnove zálohy ─────────
 // Príznak "demo" sa prijme len pre pôvodných 4 ukážkových zákazníkov,
@@ -1508,16 +1319,7 @@ function countedCusts(){ return custs.filter(c=>!c.demo).length; }
 function canAddCustomer(){ return countedCusts() < LIC.limit; }
 function limitTxt(){ return LIC.limit===Infinity ? 'neobmedzene' : LIC.limit; }
 
-function sellerHTML(){
-  return `<div style="background:rgba(6,214,160,.1);border:1px solid var(--accent3);border-radius:10px;padding:12px">
-      <div style="color:var(--accent3);font-weight:600;margin-bottom:4px">Licenciu objednáš u</div>
-      ${esc(LIC_SELLER.firma)}<br>
-      ✉️ <a href="mailto:${esc(LIC_SELLER.email)}?subject=Licencia%20ServisKotlov%20PRO" style="color:var(--accent)">${esc(LIC_SELLER.email)}</a><br>
-      📱 <a href="tel:${esc(LIC_SELLER.phone.replace(/\s/g,''))}" style="color:var(--accent)">${esc(LIC_SELLER.phone)}</a>
-    </div>`;
-}
 function showLimitModal(){
-  document.getElementById('licModalTitle').textContent='🔑 Limit bezplatnej verzie';
   const b=document.getElementById('licModalBody');
   b.innerHTML=`
     <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
@@ -1525,8 +1327,8 @@ function showLimitModal(){
       ${LIC.reason?'<br><span style="color:var(--danger)">'+esc(LIC.reason)+'</span>':''}
     </div>
     <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
-      Existujúcich zákazníkov môžeš ďalej prezerať a upravovať.
-      Na pridanie ďalších potrebuješ licenciu PRO.
+      Existujúcich zákazníkov môžeš ďalej prezerať, upravovať, tlačiť protokoly aj exportovať.
+      Na pridanie ďalších potrebuješ licenčný kľúč.
     </div>
     <div style="background:rgba(6,214,160,.1);border:1px solid var(--accent3);border-radius:10px;padding:12px">
       <div style="color:var(--accent3);font-weight:600;margin-bottom:4px">Licenciu objednáš u</div>
@@ -1537,48 +1339,6 @@ function showLimitModal(){
   document.getElementById('licModal').classList.add('open');
 }
 
-// ── Funkcie verzie PRO ──────────────────────────────────
-// V tomto súbore sú len zástupné funkcie. Skutočný kód príde v PRO module
-// zo servera a tieto funkcie nahradí.
-function needPro(what){
-  if(SKLicense.isPro()){
-    showToast('⏳ Funkcie PRO sa ešte nestiahli — pripoj sa na internet','var(--warn)');
-    SKLicense.refresh();
-    return;
-  }
-  document.getElementById('licModalTitle').textContent='🔒 Funkcia verzie PRO';
-  document.getElementById('licModalBody').innerHTML=`
-    <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
-      <b style="color:var(--warn)">${esc(what||'Táto funkcia')}</b> — súčasť verzie PRO.
-      ${LIC.reason?'<br><span style="color:var(--danger)">'+esc(LIC.reason)+'</span>':''}
-    </div>
-    <div style="background:var(--surf2);border-radius:10px;padding:14px;margin-bottom:10px">
-      Verzia PRO obsahuje:<br>${PRO_FEATURES.map(f=>'• '+esc(f)).join('<br>')}
-    </div>
-    ${sellerHTML()}`;
-  document.getElementById('licModal').classList.add('open');
-}
-function proLock(id,what){
-  const el=document.getElementById(id); if(!el) return;
-  el.innerHTML=`<div class="empty"><div class="empty-ic">🔒</div>${esc(what)}<br>súčasť verzie PRO<br>
-    <button class="btn btn-o" style="margin-top:12px" onclick="needPro('${esc(what)}')">Viac o verzii PRO</button></div>`;
-}
-function renderMap(){ proLock('mapContainer','Mapa zákazníkov'); }
-function geocodeAll(){ needPro('Hromadné doplnenie GPS'); }
-function renderInvItems(){ proLock('invItems','Faktúry a kalkulácie'); }
-function calcInv(){}
-function addInvItem(){ needPro('Faktúry a kalkulácie'); }
-function saveInvoice(){ needPro('Faktúry a kalkulácie'); }
-function printInvoice(){ needPro('Faktúry a kalkulácie'); }
-function renderProtoList(){ proLock('protoList','Servisné protokoly'); }
-function openProtocol(){ needPro('Servisné protokoly'); }
-function printBlankProtocol(){ needPro('Servisné protokoly'); }
-function exportExcel(){ needPro('Export do Excelu'); }
-function updateFolderUI(){ proLock('folderBox','Záloha do priečinka'); }
-function renderDriveDiag(){}
-function loadDriveSettings(){}
-function handleOAuthRedirect(){}
-
 function renderLicUI(){
   const used=countedCusts();
   const hasDemo=custs.some(c=>c.demo);
@@ -1587,29 +1347,28 @@ function renderLicUI(){
   if(box){
     let h;
     if(LIC.valid){
-      h=`<div style="font-weight:600;color:var(--accent3);margin-bottom:6px">✅ Licencia PRO aktívna</div>
+      h=`<div style="font-weight:600;color:var(--accent3);margin-bottom:6px">✅ Licencia aktívna</div>
          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
-         Kľúč: …${esc((LIC.key||'').slice(-5))}<br>
-         Zákazníkov: ${used} / neobmedzene<br>
-         Platnosť: ${LIC.exp?'do '+fmtTs(LIC.exp):'bez obmedzenia'}<br>
-         Bez internetu funguje do: ${fmtTs(LIC.until)}
-         ${SKLicense.proReady()?'':'<br><span style="color:var(--warn)">Funkcie PRO sa ešte nestiahli — pripoj sa na internet.</span>'}</div>`;
+         ${LIC.name?'Pre: '+esc(LIC.name)+'<br>':''}${LIC.email?esc(LIC.email)+'<br>':''}
+         Zákazníkov: ${used} / ${limitTxt()}<br>
+         Platnosť: ${LIC.exp?'do '+fmt(LIC.exp):'bez obmedzenia'}
+         ${LIC_API?'<br>Overené online: '+(LIC.lastCheck?fmt(LIC.lastCheck):'—')+' · '+esc(deviceLabel()):''}</div>`;
     } else {
       const pct=Math.min(100,used/FREE_LIMIT*100);
       const col=used>=FREE_LIMIT?'var(--danger)':(used>=FREE_LIMIT-2?'var(--warn)':'var(--accent3)');
       h=`<div style="font-weight:600;margin-bottom:6px">Bezplatná verzia</div>
          ${LIC.reason?`<div style="font-family:var(--mono);font-size:11px;color:var(--danger);margin-bottom:6px">${esc(LIC.reason)}</div>`:''}
+         ${LIC.needsActivation?`<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:6px">Kľúč je uložený — stačí ťuknúť na Aktivovať licenciu.</div>`:''}
          <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;margin-bottom:6px">
            <span style="color:var(--muted)">Zákazníci</span><span style="color:${col}">${used} / ${FREE_LIMIT}</span></div>
          <div style="height:7px;background:var(--surf3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col}"></div></div>
          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
-           Verzia PRO: ${PRO_FEATURES.map(esc).join(' · ')}<br>
-           Objednávka: ${esc(LIC_SELLER.email)} · ${esc(LIC_SELLER.phone)}
+           Pre viac zákazníkov: ${esc(LIC_SELLER.email)} · ${esc(LIC_SELLER.phone)}
            ${hasDemo?'<br>Ukážkoví zákazníci sa do limitu nepočítajú.':''}</div>`;
     }
     box.innerHTML=h;
   }
-  const rb=document.getElementById('licRemoveBtn'); if(rb) rb.style.display=LIC.hasKey?'block':'none';
+  const rb=document.getElementById('licRemoveBtn'); if(rb) rb.style.display=localStorage.getItem('sk2_license')?'block':'none';
   const db=document.getElementById('demoRemoveBtn'); if(db) db.style.display=hasDemo?'block':'none';
   // Prehľad
   const ban=document.getElementById('licBanner');
@@ -1619,30 +1378,40 @@ function renderLicUI(){
     if(hasDemo) parts.push(`<div class="ai ok" onclick="pg('settings')"><div class="ai-ic">🧪</div><div class="ai-tx"><div class="ai-nm">Zobrazujú sa ukážkoví zákazníci</div><div class="ai-ds">Odstrániš ich v Nastaveniach · do limitu sa nepočítajú</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     if(!LIC.valid && storageReady){
       const s=used>=FREE_LIMIT?'d':(used>=FREE_LIMIT-2?'w':'ok');
-      parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, faktúry, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+      parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Pre viac zákazníkov aktivuj licenciu'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     ban.innerHTML=parts.join('');
   }
 }
 async function activateLicense(){
-  const key=(document.getElementById('licInput').value||'').trim();
+  const inp=(document.getElementById('licInput').value||'').replace(/\s+/g,'');
+  const key=inp||localStorage.getItem('sk2_license')||'';
   if(!key){ alert('Vlož licenčný kľúč.'); return; }
-  showToast('⏳ Aktivujem licenciu…','var(--accent)');
-  const r=await SKLicense.activate(key);
-  if(!r.ok){ alert('❌ '+r.message); return; }
+  const r=await verifyLicenseKey(key);
+  if(!r.ok){ alert('❌ '+r.reason); return; }
+  if(LIC_API){
+    let res;
+    try{ res=await licApi('/activate',{key, device:deviceId(), label:deviceLabel()}); }
+    catch(e){ alert('📶 Na aktiváciu licencie je potrebný internet.\nPripoj sa a skús znova.'); return; }
+    if(!res || !res.ok){ alert('❌ '+((res&&res.reason)||'Aktivácia sa nepodarila')); return; }
+    localStorage.setItem('sk2_lic_act',JSON.stringify({key, last:todayISO()}));
+    localStorage.removeItem('sk2_lic_msg');
+  }
+  localStorage.setItem('sk2_license',key);
   document.getElementById('licInput').value='';
-  syncLic(); renderLicUI(); applyProUI();
+  await checkLicense();
   showToast('✅ Licencia aktivovaná');
 }
 async function removeLicense(){
-  if(!confirm('Odstrániť licenciu z tohto zariadenia?\nDáta zostanú, aplikácia sa vráti do bezplatnej verzie.\nZariadenie sa uvoľní a licenciu môžeš aktivovať inde.'))return;
-  const r=await SKLicense.deactivate();
-  if(!r.ok){
-    if(!confirm('Bez internetu sa zariadenie na serveri neuvoľní (miesto ostane obsadené).\nOdstrániť licenciu aj tak?')) return;
-    await SKLicense.forget();
+  if(!confirm('Odstrániť licenciu z tohto zariadenia?\nDáta zostanú, len sa vráti limit bezplatnej verzie.'+(LIC_API?'\nZariadenie sa uvoľní a licenciu môžeš aktivovať inde.':'')))return;
+  const key=localStorage.getItem('sk2_license');
+  if(LIC_API && key){
+    try{ await licApi('/release',{key, device:deviceId()}); }
+    catch(e){ if(!confirm('Bez internetu sa zariadenie na serveri neuvoľní (miesto ostane obsadené).\nPokračovať?')) return; }
   }
-  // funkcie PRO sú ešte v pamäti — po znovunačítaní zmiznú
-  location.reload();
+  localStorage.removeItem('sk2_license'); localStorage.removeItem('sk2_lic_act'); localStorage.removeItem('sk2_lic_msg');
+  await checkLicense();
+  showToast('Licencia odstránená','var(--warn)');
 }
 async function removeDemo(){
   if(!confirm('Odstrániť ukážkových zákazníkov?'))return;
@@ -2015,6 +1784,39 @@ function renderCal(){
 // ═══════════════════════════════════════════════
 // MAP
 // ═══════════════════════════════════════════════
+function renderMap(){
+  if(!map){
+    map=L.map('mapContainer',{zoomControl:true}).setView([48.72,17.15],10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
+  }
+  mapMarkers.forEach(m=>m.remove());
+  mapMarkers=[];
+  const withGPS=custs.filter(c=>c.lat&&c.lng);
+  if(!withGPS.length){return;}
+  const bounds=[];
+  withGPS.forEach(c=>{
+    const s=getSt(c);
+    const color=s==='ov'||s==='d'?'#ef233c':s==='w'?'#ffb703':'#06d6a0';
+    const icon=L.divIcon({html:`<div style="background:${color};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>`,iconSize:[14,14],iconAnchor:[7,7]});
+    const adr=[c.addr,[c.psc,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const marker=L.marker([c.lat,c.lng],{icon})
+      .addTo(map)
+      .bindPopup(`
+        <div class="mp-nm">${esc(c.name)}</div>
+        <div class="mp-ds">${esc(adr)||'—'}<br>${esc(c.boilerBrand||'')}<br>
+          <span style="color:${color}">${stLabel(s)} · ${getDaysText(c)}</span></div>
+        <button class="mp-btn mp-nav" onclick="navToCust('${c.id}')">🧭 Navigovať</button>
+        <button class="mp-btn mp-det" onclick="openDetail('${c.id}')">ℹ️ Detail zákazníka</button>
+        <div class="mp-row">
+          ${c.phone?`<button class="mp-btn" data-tel="${esc(c.phone)}" onclick="window.location.href='tel:'+this.dataset.tel">📞 Volať</button>`:''}
+          <button class="mp-btn" onclick="navTo(${c.lat},${c.lng},'waze')">Waze</button>
+        </div>`);
+    mapMarkers.push(marker);
+    bounds.push([c.lat,c.lng]);
+  });
+  if(bounds.length)map.fitBounds(bounds,{padding:[20,20]});
+  setTimeout(()=>map.invalidateSize(),100);
+}
 
 // ═══════════════════════════════════════════════
 // MODAL: ADD / EDIT
@@ -2399,21 +2201,501 @@ function delHistEntry(hid){
 // ═══════════════════════════════════════════════
 // INVOICE
 // ═══════════════════════════════════════════════
+function addInvItem(){invItems.push({desc:'',qty:1,price:0});renderInvItems();}
+function renderInvItems(){
+  const el=document.getElementById('invItems');
+  el.innerHTML=invItems.map((item,i)=>`
+    <div class="inv-item">
+      <input class="inv-desc" placeholder="Popis položky" value="${esc(item.desc)}" oninput="invItems[${i}].desc=this.value">
+      <input class="inv-qty" type="number" min="1" placeholder="Ks" value="${esc(item.qty)}" oninput="invItems[${i}].qty=parseFloat(this.value)||1;calcInv()">
+      <input class="inv-price" type="number" min="0" step="0.01" placeholder="€" value="${esc(item.price)}" oninput="invItems[${i}].price=parseFloat(this.value)||0;calcInv()">
+      <div class="inv-total">${((item.qty||1)*(item.price||0)).toFixed(2)}€</div>
+      <button class="inv-del" onclick="invItems.splice(${i},1);renderInvItems()">✕</button>
+    </div>`).join('');
+  calcInv();
+}
+function calcInv(){
+  const base=invItems.reduce((s,i)=>(s+(i.qty||1)*(i.price||0)),0);
+  const payer=isVatPayer();
+  const vat=payer?round2(base*VAT_RATE):0;
+  document.getElementById('invLblBase').textContent=payer?'CELKOM BEZ DPH':'Nie som platiteľ DPH';
+  document.getElementById('invLblVat').textContent=payer?'DPH '+Math.round(VAT_RATE*100)+'%':'';
+  document.getElementById('invLblTotal').textContent=payer?'CELKOM S DPH':'CELKOM K ÚHRADE';
+  document.getElementById('invBase').textContent=payer?base.toFixed(2)+' €':'';
+  document.getElementById('invVat').textContent=payer?vat.toFixed(2)+' €':'';
+  document.getElementById('invTotal').textContent=(base+vat).toFixed(2)+' €';
+  // refresh totals in item column
+  document.querySelectorAll('.inv-total').forEach((el,i)=>{
+    if(invItems[i])el.textContent=((invItems[i].qty||1)*(invItems[i].price||0)).toFixed(2)+'€';
+  });
+}
+function saveInvoice(){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  c.invoice=[...invItems]; save(); alert('✅ Kalkulácia uložená');
+}
 
 // ═══════════════════════════════════════════════
 // SERVISNÝ PROTOKOL
 // ═══════════════════════════════════════════════
+const PROTO_UKONY = [
+ 'Vizuálna kontrola kotla, kotolne a prístupu k zariadeniu',
+ 'Kontrola tesnosti plynovej cesty, detekcia úniku plynu',
+ 'Demontáž, kontrola a vyčistenie horáka',
+ 'Vyčistenie výmenníka tepla a spaľovacej komory',
+ 'Kontrola / nastavenie zapaľovacej a ionizačnej elektródy',
+ 'Kontrola a prečistenie sifónu a odvodu kondenzátu',
+ 'Kontrola odvodu spalín a prívodu vzduchu, tesnosť spojov',
+ 'Kontrola tlaku v expanznej nádobe, dohustenie',
+ 'Kontrola funkcie poistného ventilu',
+ 'Kontrola tlaku vody v systéme, doplnenie, odvzdušnenie',
+ 'Kontrola obehového čerpadla a trojcestného ventilu',
+ 'Kontrola prevádzkového, havarijného termostatu a čidiel',
+ 'Kontrola regulácie, ekvitermickej krivky a časových programov',
+ 'Kontrola prípravy TÚV, čistenie doskového výmenníka',
+ 'Kontrola zásobníka TÚV a anódovej tyče',
+ 'Kontrola elektroinštalácie, svorkovnice a uzemnenia',
+ 'Analýza spalín, nastavenie pomeru plyn/vzduch',
+ 'Skúšobná prevádzka a kontrola bezpečnostných funkcií',
+ 'Poučenie zákazníka o obsluhe a údržbe zariadenia'
+];
+const PROTO_MER = [
+ ['co2','Obsah CO₂','%','8,7 – 9,5 %'],
+ ['o2','Obsah O₂','%','4,0 – 6,0 %'],
+ ['co','Obsah CO','ppm','< 100 ppm'],
+ ['tsp','Teplota spalín','°C','—'],
+ ['tvz','Teplota vzduchu','°C','—'],
+ ['tah','Komínový ťah','Pa','—'],
+ ['uc','Účinnosť','%','—'],
+ ['gs','Tlak plynu – statický','mbar','18 – 25 mbar'],
+ ['gd','Tlak plynu – dynamický','mbar','17 – 25 mbar']
+];
+const ZAVER_TXT = {
+  sposobile:'Zariadenie je spôsobilé na ďalšiu prevádzku',
+  podmienecne:'Spôsobilé s výhradou – nutné odstrániť závady podľa bodu 6',
+  nesposobile:'Nespôsobilé – prevádzka zastavená'
+};
+let protoDraft = null, protoEditId = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function nl2br(s){return esc(s).replace(/\n/g,'<br>');}
 
+// Najvyššie použité poradové číslo: z nastavení aj zo všetkých protokolov v databáze
+// (po obnove zálohy z iného zariadenia tak číslovanie pokračuje a nezačne odznova).
+function maxProtoSeq(){
+  let m=parseInt(settings.protoSeq)||0;
+  custs.forEach(c=>(c.protocols||[]).forEach(p=>{
+    const s=parseInt((String(p.cislo||'').match(/^SP-\d{4}-(\d+)$/)||[])[1]);
+    if(s>m) m=s;
+  }));
+  return m;
+}
+function findProtoByNum(cislo, exceptId){
+  cislo=String(cislo||'').trim(); if(!cislo) return null;
+  for(const c of custs) for(const p of (c.protocols||[])) if(p.id!==exceptId && String(p.cislo||'').trim()===cislo) return {c,p};
+  return null;
+}
+function nextProtoNum(){
+  const y=new Date().getFullYear();
+  const seq=maxProtoSeq()+1;
+  return 'SP-'+y+'-'+String(seq).padStart(4,'0');
+}
+function emptyProto(){
+  return {id:uid(),cislo:nextProtoNum(),date:todayISO(),
+    from:'',to:'',hours:'',checks:PROTO_UKONY.map(()=>({s:'',n:''})),mer:{},
+    tlakSys:'',tlakExp:'',tesnost:'Vyhovuje – bez úniku',diely:[],zavady:'',
+    zaver:'sposobile',next:'',km:'',tech:settings.name||'',preb:''};
+}
 
+function openProtocol(pid){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  c.protocols=c.protocols||[];
+  if(pid){
+    const ex=c.protocols.find(x=>x.id===pid); if(!ex)return;
+    protoDraft=JSON.parse(JSON.stringify(ex)); protoEditId=pid;
+    document.getElementById('protoTitle').textContent='Protokol '+ex.cislo;
+  } else {
+    protoDraft=emptyProto(); protoEditId=null;
+    protoDraft.preb=c.name||'';
+    protoDraft.next=addMonthsISO(todayISO(), settings.interval||12);
+    document.getElementById('protoTitle').textContent='Nový servisný protokol';
+  }
+  const p=protoDraft;
+  if(!pid && !p.devId) p.devId=dueDev(c).id;
+  fillDevSelect('pDev','pDevWrap',c,p.devId||'main');
+  if(!p.checks||p.checks.length!==PROTO_UKONY.length) p.checks=PROTO_UKONY.map((_,i)=>(p.checks&&p.checks[i])||{s:'',n:''});
+  document.getElementById('pCislo').value=p.cislo;
+  document.getElementById('pDate').value=p.date;
+  document.getElementById('pFrom').value=p.from||'';
+  document.getElementById('pTo').value=p.to||'';
+  document.getElementById('pHours').value=p.hours||'';
+  document.getElementById('pTlakSys').value=p.tlakSys||'';
+  document.getElementById('pTlakExp').value=p.tlakExp||'';
+  document.getElementById('pTesnost').value=p.tesnost||'Vyhovuje – bez úniku';
+  document.getElementById('pZavady').value=p.zavady||'';
+  document.getElementById('pNext').value=p.next||'';
+  document.getElementById('pKm').value=p.km||'';
+  document.getElementById('pTech').value=p.tech||settings.name||'';
+  document.getElementById('pPreb').value=p.preb||c.name||'';
+  renderChk(); renderMer(); renderDiel(); setZaver(p.zaver||'sposobile');
+  document.getElementById('protoModal').classList.add('open');
+}
 function closePM(){document.getElementById('protoModal').classList.remove('open');}
 
+function renderChk(){
+  document.getElementById('chkList').innerHTML=PROTO_UKONY.map((u,i)=>{
+    const st=(protoDraft.checks[i]||{}).s||'';
+    const nt=(protoDraft.checks[i]||{}).n||'';
+    return `<div class="chk-row"><div style="flex:1">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="chk-num">${i+1}</div>
+        <div class="chk-lbl">${esc(u)}</div>
+        <div class="chk-btns">
+          <button class="chk-b ${st==='ok'?'on-ok':''}" onclick="setChk(${i},'ok')">✓</button>
+          <button class="chk-b ${st==='chyba'?'on-bad':''}" onclick="setChk(${i},'chyba')">✗</button>
+          <button class="chk-b ${st==='na'?'on-na':''}" onclick="setChk(${i},'na')">–</button>
+        </div>
+      </div>
+      ${st==='chyba'||nt?`<input class="chk-note" placeholder="Poznámka k úkonu" value="${esc(nt)}" oninput="protoDraft.checks[${i}].n=this.value">`:''}
+    </div></div>`;
+  }).join('');
+}
+function setChk(i,s){
+  protoDraft.checks[i]=protoDraft.checks[i]||{s:'',n:''};
+  protoDraft.checks[i].s = protoDraft.checks[i].s===s ? '' : s;
+  renderChk();
+}
+function setAllChecks(s){
+  protoDraft.checks=PROTO_UKONY.map((_,i)=>({s:s,n:(protoDraft.checks[i]||{}).n||''}));
+  renderChk();
+}
+function renderMer(){
+  document.getElementById('merRows').innerHTML=PROTO_MER.map(([k,l,u])=>`
+    <div class="mer-row">
+      <div class="ml">${l}<br><span style="opacity:.7">${u}</span></div>
+      <input inputmode="decimal" value="${esc(protoDraft.mer[k+'_p']||'')}" oninput="protoDraft.mer['${k}_p']=this.value">
+      <input inputmode="decimal" value="${esc(protoDraft.mer[k+'_min']||'')}" oninput="protoDraft.mer['${k}_min']=this.value">
+      <input inputmode="decimal" value="${esc(protoDraft.mer[k+'_max']||'')}" oninput="protoDraft.mer['${k}_max']=this.value">
+    </div>`).join('');
+}
+function addDiel(){protoDraft.diely.push({desc:'',code:'',qty:1,price:0});renderDiel();}
+function renderDiel(){
+  const el=document.getElementById('dlItems');
+  if(!protoDraft.diely.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 0">Žiadne položky</div>';return;}
+  el.innerHTML=protoDraft.diely.map((d,i)=>`
+    <div class="dl-item">
+      <input placeholder="Názov dielu" value="${esc(d.desc)}" oninput="protoDraft.diely[${i}].desc=this.value">
+      <input placeholder="Kód" value="${esc(d.code||'')}" oninput="protoDraft.diely[${i}].code=this.value">
+      <input inputmode="decimal" placeholder="€" value="${esc(d.price)}" oninput="protoDraft.diely[${i}].price=this.value">
+      <button class="dl-del" onclick="protoDraft.diely.splice(${i},1);renderDiel()">✕</button>
+    </div>`).join('');
+}
+function setZaver(v){
+  protoDraft.zaver=v;
+  document.querySelectorAll('#protoModal .zv-opt').forEach(e=>e.classList.toggle('sel',e.dataset.zv===v));
+}
+function saveProtocol(andPrint){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  c.protocols=c.protocols||[];
+  const p=protoDraft;
+  p.cislo=document.getElementById('pCislo').value;
+  p.date=document.getElementById('pDate').value;
+  p.from=document.getElementById('pFrom').value;
+  p.to=document.getElementById('pTo').value;
+  p.hours=document.getElementById('pHours').value;
+  p.tlakSys=document.getElementById('pTlakSys').value;
+  p.tlakExp=document.getElementById('pTlakExp').value;
+  p.tesnost=document.getElementById('pTesnost').value;
+  p.zavady=document.getElementById('pZavady').value;
+  p.next=document.getElementById('pNext').value;
+  p.km=document.getElementById('pKm').value;
+  p.tech=document.getElementById('pTech').value;
+  p.preb=document.getElementById('pPreb').value;
+  p.devId=document.getElementById('pDev').value||'main';
+  const dup=findProtoByNum(p.cislo, p.id);
+  if(dup && !confirm('Protokol s číslom '+p.cislo+' už existuje (zákazník '+dup.c.name+', '+fmt(dup.p.date)+').\n\nUložiť aj tak s rovnakým číslom?')) return;
+
+  const isNew=!protoEditId;
+  if(isNew){
+    c.protocols.unshift(p);
+    const seq=parseInt((p.cislo.match(/(\d+)$/)||[])[1]);
+    if(seq && seq>(parseInt(settings.protoSeq)||0)){settings.protoSeq=seq;saveSett();}
+    const parts=p.diely.reduce((s,d)=>s+(parseFloat(String(d.price).replace(',','.'))||0),0);
+    c.history=c.history||[];
+    c.history.unshift({id:uid(),date:p.date,type:'Ročná prehliadka',
+      desc:'Servisný protokol '+p.cislo+(p.zavady?' — '+p.zavady.split('\n')[0]:''),
+      labor:0,parts:parts,tech:p.tech,devId:p.devId});
+  } else {
+    const idx=c.protocols.findIndex(x=>x.id===protoEditId);
+    if(idx>-1)c.protocols[idx]=p;
+  }
+  setDevDates(c,p.devId,p.date,p.next);
+  save(); renderProtoList(); renderHistList(); renderCusts(); renderDash();
+  const pid=p.id; protoEditId=p.id;
+  document.getElementById('protoTitle').textContent='Protokol '+p.cislo;
+  if(andPrint){ closePM(); printProtocolById(pid); }
+  else { showToast('✅ Protokol '+p.cislo+' uložený'); closePM(); }
+}
+function delProtocol(pid){
+  if(!confirm('Vymazať tento protokol?'))return;
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  c.protocols=(c.protocols||[]).filter(x=>x.id!==pid);
+  save(); renderProtoList();
+}
+function renderProtoList(){
+  const c=custs.find(x=>x.id===detailId);
+  const list=(c&&c.protocols)||[];
+  const el=document.getElementById('protoList'); if(!el)return;
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ic">📄</div>Žiadny protokol</div>';return;}
+  el.innerHTML=list.map(p=>`
+    <div class="proto-item">
+      <div class="pi-t">
+        <div class="pi-n">${esc(p.cislo)}</div>
+        <div class="pi-s">${fmt(p.date)} · ${esc((ZAVER_TXT[p.zaver]||'').split('–')[0].trim())}${hasMulti(c)?' · '+esc(devShort(c,p.devId)):''}</div>
+      </div>
+      <button onclick="printProtocolById('${p.id}')">🖨️</button>
+      <button onclick="openProtoEmail('${p.id}')" title="Poslať e-mailom">✉️</button>
+      <button onclick="openProtocol('${p.id}')">✏️</button>
+      <button onclick="delProtocol('${p.id}')" style="color:var(--danger);background:rgba(239,35,60,.13)">🗑️</button>
+    </div>`).join('');
+}
+
+function printProtocolById(pid){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  const p=(c.protocols||[]).find(x=>x.id===pid); if(!p)return;
+  doPrintProtocol(c,p,false);
+}
+function printBlankProtocol(){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  const p=emptyProto(); p.cislo=''; p.zaver=''; p.tesnost=''; p.preb=''; p.tech='';
+  doPrintProtocol(c,p,true);
+}
+function doPrintProtocol(c,p,blank){
+  const pa=document.getElementById('printArea');
+  pa.innerHTML=buildProtocolHTML(c,p,blank);
+  pa.style.display='block';
+  setTimeout(()=>{window.print();pa.style.display='none';},120);
+}
+
+function buildProtocolHTML(c,p,blank){
+  const D=getDev(c,p&&p.devId);
+  const S=settings;
+  const box=(on,bad)=>`<span class="box${on?' on':''}${bad?' bad':''}"></span>`;
+  const v=x=>blank?'':esc(x==null?'':x);
+  const seg=(label,val)=>val?`<span class="seg">${label?label+': ':''}${esc(val)}</span>`:'';
+  const logo=S.logo||DEFAULT_LOGO;
+
+  const line1=[seg('IČO',S.ico),seg('DIČ',S.dic),isVatPayer()?seg('IČ DPH',S.icdph):''].filter(Boolean).join('');
+  const line2=[seg('Tel.',S.phone),seg('',S.email)].filter(Boolean).join('');
+  const line3=[seg('',S.web),seg('Oprávnenie č.',S.opravnenie)].filter(Boolean).join('');
+
+  const checks=PROTO_UKONY.map((u,i)=>{
+    const st=blank?'':((p.checks&&p.checks[i]||{}).s||'');
+    const nt=blank?'':((p.checks&&p.checks[i]||{}).n||'');
+    return `<tr class="${i%2?'odd':''}">
+      <td class="num">${i+1}</td><td>${esc(u)}</td>
+      <td class="c">${box(st==='ok')}</td>
+      <td class="c">${box(st==='chyba',true)}</td>
+      <td class="c">${box(st==='na')}</td>
+      <td class="small">${esc(nt)}</td></tr>`;
+  }).join('');
+
+  const mer=PROTO_MER.map(([k,l,u,n],i)=>`
+    <tr class="${i%2?'odd':''}"><td>${l}</td><td class="v">${u}</td>
+      <td class="v">${v((p.mer||{})[k+'_p'])}</td>
+      <td class="v">${v((p.mer||{})[k+'_min'])}</td>
+      <td class="v">${v((p.mer||{})[k+'_max'])}</td>
+      <td class="v small">${n}</td></tr>`).join('');
+
+  const rows=(blank?[]:(p.diely||[])).slice();
+  while(rows.length<4)rows.push({desc:'',code:'',price:''});
+  const diely=rows.map((d,i)=>`<tr class="${i%2?'odd':''}"><td class="num">${i+1}</td>
+    <td>${esc(d.desc||'')}</td><td>${esc(d.code||'')}</td>
+    <td class="num">${d.desc?'1':''}</td>
+    <td class="num">${d.price?esc(d.price)+' €':''}</td></tr>`).join('');
+
+  const zv=k=>`<div class="opt${!blank&&p.zaver===k?' sel':''}">${box(!blank&&p.zaver===k)}<div>${ZAVER_TXT[k]}</div></div>`;
+
+  return `<div class="sp">
+   <div class="sp-page">
+    <div class="head">
+      <div class="brand">
+        <div class="logo">${logo?`<img src="${esc(logo)}" alt="">`:''}</div>
+        <div class="firma">
+          <b>${esc(S.firma||'—')}</b>
+          ${esc(S.addr||'')}<br>
+          ${line1}${line1?'<br>':''}${line2}${line2?'<br>':''}${line3}
+        </div>
+      </div>
+      <div class="doc">
+        <h1>SERVISNÝ PROTOKOL</h1>
+        <div class="sub">Ročná servisná prehliadka a údržba kotla</div>
+        <div class="cislo"><span>Číslo protokolu</span>${esc(p.cislo||'')}</div>
+      </div>
+    </div>
+
+    <section><table><tr>
+      <td class="lbl">Dátum zásahu</td><td>${blank?'':fmt(p.date)}</td>
+      <td class="lbl">Príchod</td><td>${v(p.from)}</td>
+      <td class="lbl">Odchod</td><td>${v(p.to)}</td>
+    </tr></table></section>
+
+    <section class="spnb"><h2>1. Zákazník a miesto inštalácie</h2>
+      <table>
+        <tr><td class="lbl">Zákazník</td><td>${esc(c.name||'')}</td>
+            <td class="lbl">Miesto inštalácie</td><td>${esc([c.addr,c.city].filter(Boolean).join(', '))}</td></tr>
+        <tr><td class="lbl">Telefón</td><td>${esc(c.phone||'')}</td>
+            <td class="lbl">Poznámka</td><td>${esc(c.notes||'')}</td></tr>
+      </table></section>
+
+    <section class="spnb"><h2>2. Údaje o zariadení</h2>
+      <table>
+        <tr><td class="lbl">Výrobca</td><td>${esc(D.boilerBrand||'')}</td>
+            <td class="lbl">Model</td><td>${esc(D.model||'')}</td>
+            <td class="lbl">Výrobné číslo</td><td>${esc(D.serial||'')}</td></tr>
+        <tr><td class="lbl">Typ</td><td>${esc(D.boilerType||'')}</td>
+            <td class="lbl">Výkon (kW)</td><td>${esc(D.power||'')}</td>
+            <td class="lbl">Rok inštalácie</td><td>${esc(D.year||'')}</td></tr>
+        ${D.place?`<tr><td class="lbl">Umiestnenie</td><td colspan="5">${esc(D.place)}</td></tr>`:''}
+      </table></section>
+
+    <section><h2>3. Vykonané úkony</h2>
+      <table class="check"><thead><tr>
+        <th style="width:8mm" class="num">Č.</th><th>Úkon</th>
+        <th class="c">OK</th><th class="c">Chyba</th><th class="c">N/A</th>
+        <th style="width:52mm">Poznámka</th></tr></thead><tbody>${checks}</tbody></table>
+      <div class="small" style="margin-top:1.2mm">OK = vykonané, stav vyhovujúci &nbsp;·&nbsp; Chyba = zistená závada (popis v bode 6) &nbsp;·&nbsp; N/A = netýka sa</div>
+    </section>
+
+   </div>
+   <div class="sp-page">
+    <section><h2>4. Analýza spalín a nastavenie spaľovania</h2>
+      <table class="mer"><thead><tr>
+        <th class="p">Veličina</th><th class="num">Jednotka</th><th class="num">Pred servisom</th>
+        <th class="num">Po servise – min.</th><th class="num">Po servise – max.</th><th class="num">Norma</th>
+      </tr></thead><tbody>${mer}</tbody></table>
+      <table style="margin-top:1.5mm"><tr>
+        ${S.analyzer?`<td class="lbl">Analyzátor</td><td>${esc(S.analyzer)}</td>`:''}
+        ${S.analyzerCal?`<td class="lbl">Kalibrácia do</td><td>${esc(S.analyzerCal)}</td>`:''}
+        <td class="lbl">Tlak vody v systéme</td><td>${v(p.tlakSys)}${!blank&&p.tlakSys?' bar':''}</td>
+        <td class="lbl">Tlak v expanznej nádobe</td><td>${v(p.tlakExp)}${!blank&&p.tlakExp?' bar':''}</td>
+        <td class="lbl">Skúška tesnosti plynu</td><td>${v(p.tesnost)}</td>
+      </tr></table>
+    </section>
+
+    <section><h2>5. Vymenené diely a materiál</h2>
+      <table><thead><tr><th style="width:8mm" class="num">Č.</th><th>Názov položky</th>
+        <th style="width:30mm">Kód</th><th style="width:14mm" class="num">Ks</th>
+        <th style="width:26mm" class="num">Cena</th></tr></thead><tbody>${diely}</tbody></table></section>
+
+    <section class="spnb"><h2>6. Zistené závady, odporúčania a poznámky</h2>
+      <div class="lines">${blank?'':nl2br(p.zavady||'')}</div></section>
+
+    <section class="spnb"><h2>7. Záver servisnej prehliadky</h2>
+      <div class="zaver">${zv('sposobile')}${zv('podmienecne')}${zv('nesposobile')}</div>
+      <table style="margin-top:2mm"><tr>
+        <td class="lbl">Ďalšia prehliadka</td><td>${blank?'':fmt(p.next)}</td>
+        <td class="lbl">Odpracované hodiny</td><td>${v(p.hours)}</td>
+        <td class="lbl">Dopravné (km)</td><td>${v(p.km)}</td>
+      </tr></table></section>
+
+    <section class="spnb"><h2>8. Prevzatie a podpisy</h2>
+      <div class="small">Zákazník svojím podpisom potvrdzuje, že práce uvedené v tomto protokole boli vykonané v deklarovanom rozsahu,
+      zariadenie mu bolo odovzdané v prevádzkyschopnom stave (ak nie je v bode 7 uvedené inak) a bol oboznámený so zistenými
+      závadami, odporúčaniami a s bezpečnou obsluhou zariadenia.</div>
+      <div class="sign${!blank&&S.stamp?' has-stamp':''}">
+        <div class="s">${!blank&&S.stamp?`<img class="stamp" src="${esc(S.stamp)}" alt="">`:''}<div class="line">Podpis servisného technika a pečiatka</div>
+          <div class="who">${esc(p.tech||S.name||'')}</div></div>
+        <div class="s"><div class="line">Podpis zákazníka / preberajúceho</div>
+          <div class="who">${esc(p.preb||c.name||'')}</div></div>
+      </div></section>
+
+    <div class="foot">
+      <span>${esc([S.firma,S.addr,S.ico?'IČO '+S.ico:'',S.phone].filter(Boolean).join(' · '))}</span>
+      <span>Protokol ${esc(p.cislo||'')}${blank?'':' · '+fmt(p.date)}</span>
+    </div>
+    <div style="font-size:6.5pt;color:#8a929c;text-align:center;margin-top:1mm">${esc(licTag())}</div>
+   </div>
+  </div>`;
+}
 
 // ═══════════════════════════════════════════════
 // PRINT: INVOICE
 // ═══════════════════════════════════════════════
+function printInvoice(){
+  const c=custs.find(x=>x.id===detailId); if(!c)return;
+  const base=invItems.reduce((s,i)=>(s+(i.qty||1)*(i.price||0)),0);
+  const payer=isVatPayer();
+  const vat=payer?round2(base*VAT_RATE):0;
+  const total=base+vat;
+  const taxIds=[settings.ico?'IČO: '+esc(settings.ico):'', settings.dic?'DIČ: '+esc(settings.dic):'',
+                payer&&settings.icdph?'IČ DPH: '+esc(settings.icdph):''].filter(Boolean).join('<br>');
+  const invNum='INV-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-4);
+  const pa=document.getElementById('printArea');
+  pa.innerHTML=`
+    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:24px;">
+        <div>
+          <h1 style="font-size:26px;margin:0;color:#1a1a2e">FAKTÚRA</h1>
+          <p style="color:#666;margin:4px 0 0">${invNum}</p>
+        </div>
+        <div style="text-align:right;font-size:12px;line-height:1.7">
+          <strong>${esc(settings.firma||'ServisKotlov')}</strong><br>
+          ${esc(settings.addr||'')}<br>
+          ${esc(settings.phone||'')}<br>
+          ${taxIds||'IČO: —'}
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-bottom:24px;">
+        <div style="flex:1;background:#f8f9fa;padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Dodávateľ</div>
+          <strong>${esc(settings.firma||settings.name||'—')}</strong><br>
+          ${esc(settings.addr||'')}<br>${esc(settings.phone||'')}
+          ${taxIds?'<div style="margin-top:4px;font-size:11px;color:#555">'+taxIds.replace(/<br>/g,' · ')+'</div>':''}
+          ${payer?'':'<div style="margin-top:4px;font-size:11px;color:#555">Nie je platiteľ DPH</div>'}
+        </div>
+        <div style="flex:1;background:#f8f9fa;padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;margin-bottom:6px">Odberateľ</div>
+          <strong>${esc(c.name)}</strong><br>
+          ${esc([c.addr,[c.psc,c.city].filter(Boolean).join(' ')].filter(Boolean).join(', '))}<br>${esc(c.phone||'')}
+        </div>
+      </div>
+      <div style="margin-bottom:6px;font-size:12px;color:#666">Dátum vystavenia: ${new Date().toLocaleDateString('sk-SK')}</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:13px;">
+        <thead>
+          <tr style="background:#1a1a2e;color:#fff;">
+            <th style="padding:8px;text-align:left">Popis</th>
+            <th style="padding:8px;text-align:center;width:50px">Ks</th>
+            <th style="padding:8px;text-align:right;width:80px">Cena/ks</th>
+            <th style="padding:8px;text-align:right;width:80px">Celkom</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${invItems.map((item,i)=>`<tr style="background:${i%2?'#f9f9f9':'#fff'}">
+            <td style="padding:7px 8px">${esc(item.desc||'—')}</td>
+            <td style="padding:7px 8px;text-align:center">${esc(item.qty||1)}</td>
+            <td style="padding:7px 8px;text-align:right">${(parseFloat(item.price)||0).toFixed(2)} €</td>
+            <td style="padding:7px 8px;text-align:right">${((item.qty||1)*(item.price||0)).toFixed(2)} €</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="display:flex;justify-content:flex-end;">
+        <table style="font-size:13px;min-width:220px;">
+          ${payer?`<tr><td style="padding:4px 8px;color:#666">Základ DPH:</td><td style="padding:4px 8px;text-align:right">${base.toFixed(2)} €</td></tr>
+          <tr><td style="padding:4px 8px;color:#666">DPH ${Math.round(VAT_RATE*100)}%:</td><td style="padding:4px 8px;text-align:right">${vat.toFixed(2)} €</td></tr>`:''}
+          <tr style="border-top:2px solid #1a1a2e;font-weight:bold;font-size:16px;">
+            <td style="padding:8px">${payer?'CELKOM S DPH:':'CELKOM K ÚHRADE:'}</td><td style="padding:8px;text-align:right">${total.toFixed(2)} €</td>
+          </tr>
+        </table>
+      </div>
+      <div style="margin-top:30px;font-size:12px;color:#666;border-top:1px solid #eee;padding-top:10px">
+        ${payer?'':'Dodávateľ nie je platiteľom DPH.<br>'}Ďakujeme za dôveru. Platba do 14 dní od dátumu vystavenia.
+      </div>
+      <div style="margin-top:8px;font-size:9px;color:#999;text-align:center">${esc(licTag())}</div>
+    </div>`;
+  pa.style.display='block';
+  window.print();
+  pa.style.display='none';
+}
 
 
 // ═══════════════════════════════════════════════
@@ -2483,6 +2765,126 @@ function clearStamp(){ settings.stamp=''; saveSett(); renderStampPrev(); showToa
 // ═══════════════════════════════════════════════
 // PROTOKOL → PDF → E-MAIL
 // ═══════════════════════════════════════════════
+const H2C_URL='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+const _scripts={};
+function loadScriptOnce(url){
+  if(!_scripts[url]) _scripts[url]=new Promise((res,rej)=>{
+    const s=document.createElement('script'); s.src=url; s.onload=res;
+    s.onerror=()=>{ delete _scripts[url]; rej(new Error('Nepodarilo sa načítať knižnicu (je potrebný internet)')); };
+    document.head.appendChild(s);
+  });
+  return _scripts[url];
+}
+// Jednoduchý PDF zápis: každá strana = jeden JPEG obrázok na A4
+function pdfFromJpegs(pages){
+  const enc=new TextEncoder(), parts=[], offs=[]; let len=0;
+  const push=x=>{ const b=typeof x==='string'?enc.encode(x):x; parts.push(b); len+=b.length; };
+  const obj=(n,body)=>{ offs[n]=len; push(n+' 0 obj\n'); body(); push('\nendobj\n'); };
+  const W=595.28, H=841.89, n=pages.length;
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  const kids=pages.map((_,i)=>(3+i*3)+' 0 R').join(' ');
+  obj(1,()=>push('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2,()=>push(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>`));
+  pages.forEach((p,i)=>{
+    const pn=3+i*3, cn=pn+1, imn=pn+2;
+    let dw=W, dh=p.h/p.w*W; if(dh>H){ dw=dw*H/dh; dh=H; }
+    const x=((W-dw)/2).toFixed(2), y=(H-dh).toFixed(2);
+    const content=`q ${dw.toFixed(2)} 0 0 ${dh.toFixed(2)} ${x} ${y} cm /Im0 Do Q`;
+    obj(pn,()=>push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${imn} 0 R >> >> /Contents ${cn} 0 R >>`));
+    obj(cn,()=>{ push(`<< /Length ${content.length} >>\nstream\n`); push(content); push('\nendstream'); });
+    obj(imn,()=>{ push(`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.bytes.length} >>\nstream\n`); push(p.bytes); push('\nendstream'); });
+  });
+  const total=2+n*3, xref=len;
+  let x='xref\n0 '+(total+1)+'\n0000000000 65535 f \n';
+  for(let i=1;i<=total;i++) x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  push(x+`trailer\n<< /Size ${total+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  const out=new Uint8Array(len); let o=0; parts.forEach(b=>{ out.set(b,o); o+=b.length; });
+  return new Blob([out],{type:'application/pdf'});
+}
+function dataURLtoBytes(u){ const b=atob(u.split(',')[1]); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i); return a; }
+async function buildProtocolPdf(c,p){
+  await loadScriptOnce(H2C_URL);
+  const pa=document.getElementById('printArea'), busy=document.getElementById('pdfBusy');
+  const prevStyle=pa.getAttribute('style');
+  busy.style.display='flex';
+  pa.innerHTML=buildProtocolHTML(c,p,false);
+  pa.setAttribute('style','display:block;position:absolute;left:0;top:0;width:210mm;background:#fff;z-index:9990');
+  const sy=window.scrollY; window.scrollTo(0,0);
+  try{
+    await Promise.all([...pa.querySelectorAll('img')].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
+    const pages=[];
+    for(const pg of pa.querySelectorAll('.sp-page')){
+      const cv=await html2canvas(pg,{scale:2,backgroundColor:'#ffffff',logging:false,useCORS:true,scrollX:0,scrollY:0,windowWidth:pg.scrollWidth});
+      pages.push({bytes:dataURLtoBytes(cv.toDataURL('image/jpeg',0.86)), w:cv.width, h:cv.height});
+    }
+    return pdfFromJpegs(pages);
+  } finally {
+    pa.innerHTML=''; if(prevStyle!==null) pa.setAttribute('style',prevStyle); else pa.removeAttribute('style');
+    window.scrollTo(0,sy); busy.style.display='none';
+  }
+}
+let mailCtx=null;
+function protoFileName(p){ return 'Servisny_protokol_'+String(p.cislo||'').replace(/[^\w-]+/g,'_')+'.pdf'; }
+async function openProtoEmail(pid){
+  const c=custs.find(x=>x.id===detailId); if(!c) return;
+  const p=(c.protocols||[]).find(x=>x.id===pid); if(!p) return;
+  const S=settings;
+  const _d=getDev(c,p.devId); const dev=[_d.boilerBrand,_d.model].filter(Boolean).join(' ');
+  document.getElementById('mTo').value=c.email||'';
+  document.getElementById('mSubj').value='Servisný protokol '+(p.cislo||'')+(p.date?' zo dňa '+fmt(p.date):'');
+  document.getElementById('mBody').value=
+    'Dobrý deň,\n\nv prílohe Vám posielame servisný protokol č. '+(p.cislo||'')+(p.date?' zo dňa '+fmt(p.date):'')+
+    (dev?' k zariadeniu '+dev:'')+'.'+(p.next?'\nOdporúčaný termín ďalšej prehliadky: '+fmt(p.next)+'.':'')+
+    '\n\nS pozdravom\n'+[S.name,S.firma,S.phone,S.email].filter(Boolean).join('\n');
+  const canShareFiles=!!(navigator.canShare&&navigator.share&&navigator.canShare({files:[new File([new Blob(['x'])],'t.pdf',{type:'application/pdf'})]}));
+  const sb=document.getElementById('mShareBtn'), db=document.getElementById('mDlBtn'), st=document.getElementById('mStatus');
+  sb.style.display=canShareFiles?'':'none'; sb.disabled=true; db.disabled=true;
+  document.getElementById('mHint').innerHTML=canShareFiles
+    ? 'Poslať cez… otvorí ponuku zdieľania. Vyber Gmail, Outlook alebo Mail – PDF bude v prílohe, adresáta doplň v e-maile.<br>Stiahnuť PDF otvorí e-mail s vyplneným adresátom, PDF priložíš z Downloads/Súbory.'
+    : 'PDF sa stiahne a otvorí sa e-mail s vyplneným adresátom. Stiahnutý súbor do e-mailu prilož (zo Stiahnutých súborov).';
+  st.textContent='⏳ Pripravujem PDF…'; st.style.color='var(--muted)';
+  mailCtx={cid:c.id, pid, file:null};
+  document.getElementById('mailModal').classList.add('open');
+  try{
+    const blob=await buildProtocolPdf(c,p);
+    if(!mailCtx||mailCtx.pid!==pid) return;
+    mailCtx.file=new File([blob],protoFileName(p),{type:'application/pdf'});
+    st.textContent='✅ PDF pripravené · '+protoFileName(p)+' · '+Math.round(blob.size/1024)+' kB'; st.style.color='var(--accent3)';
+    sb.disabled=false; db.disabled=false;
+  }catch(err){
+    st.textContent='❌ '+err.message; st.style.color='var(--danger)';
+  }
+}
+function closeMailModal(){ document.getElementById('mailModal').classList.remove('open'); mailCtx=null; }
+function rememberMailTo(){
+  const to=document.getElementById('mTo').value.trim();
+  const c=mailCtx&&custs.find(x=>x.id===mailCtx.cid);
+  if(c && to && c.email!==to){ c.email=to; save(); }
+  return to;
+}
+async function mailShare(){
+  if(!mailCtx||!mailCtx.file) return;
+  const to=rememberMailTo();
+  const subj=document.getElementById('mSubj').value, body=document.getElementById('mBody').value;
+  try{
+    await navigator.share({files:[mailCtx.file], title:subj, text:body});
+    showToast('✅ Odoslané do aplikácie'+(to?' · adresát: '+to:''));
+    closeMailModal();
+  }catch(err){
+    if(err&&err.name==='AbortError') return;
+    alert('Zdieľanie sa nepodarilo: '+(err&&err.message||err)+'\nPoužite tlačidlo Stiahnuť PDF a otvoriť e-mail.');
+  }
+}
+function mailDownload(){
+  if(!mailCtx||!mailCtx.file) return;
+  const to=rememberMailTo();
+  const url=URL.createObjectURL(mailCtx.file);
+  const a=document.createElement('a'); a.href=url; a.download=mailCtx.file.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  const subj=document.getElementById('mSubj').value;
+  const body=document.getElementById('mBody').value+'\n\n[Príloha: '+mailCtx.file.name+']';
+  setTimeout(()=>{ location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body); },700);
+}
 
 // ═══════════════════════════════════════════════
 // SETTINGS
@@ -2592,6 +2994,28 @@ async function geocodeFromForm(){
   }
 }
 
+// Hromadné doplnenie GPS všetkým bez súradníc
+async function geocodeAll(){
+  const missing = custs.filter(c=>(!c.lat||!c.lng)&&(c.addr||c.city));
+  const pr=document.getElementById('geoProgress');
+  if(!missing.length){ alert('Všetci zákazníci s adresou už majú GPS súradnice.'); return; }
+  if(!confirm('Doplniť GPS pre '+missing.length+' zákazníkov?\nPotrvá to približne '+Math.ceil(missing.length*1.5)+' sekúnd.')) return;
+  pr.style.display='block';
+  let done=0, fail=0;
+  for(const c of missing){
+    pr.textContent='⏳ '+(done+fail+1)+'/'+missing.length+' — '+c.name;
+    try{
+      const g=await geocodeAddress(c.addr,c.psc,c.city);
+      if(g){ c.lat=g.lat; c.lng=g.lng; c.geoAddr=[c.addr,c.psc,c.city].filter(Boolean).join(', '); done++; }
+      else fail++;
+    }catch(e){ fail++; }
+    save();
+    await new Promise(r=>setTimeout(r,1200));
+  }
+  pr.textContent='✅ Doplnené: '+done+(fail?'  ·  nenájdené: '+fail:'');
+  renderCusts(); renderMap();
+  setTimeout(()=>{pr.style.display='none';},6000);
+}
 
 // ═══════════════════════════════════════════════
 // NAVIGÁCIA
@@ -2652,6 +3076,30 @@ function getMyLocation(){
 // ═══════════════════════════════════════════════
 // EXPORT EXCEL
 // ═══════════════════════════════════════════════
+function exportExcel(){
+  const rows=custs.map(c=>({
+    'Meno':c.name,'Telefón':c.phone||'','Obec':c.city||'','Adresa':c.addr||'',
+    'Kotol':c.boilerBrand||'','Model':c.model||'','Typ':c.boilerType||'',
+    'Rok inst.':c.year||'','Výkon (kW)':c.power||'','S/N':c.serial||'',
+    'Posledná prehliadka':fmt(c.lastService),'Nasledujúca prehliadka':fmt(c.nextService),
+    'Stav':stLabel(getSt(c)),'Dni do prehliadky':effNext(c)?daysUntil(effNext(c)):'',
+    'Ďalšie zariadenia':(c.devices||[]).map(d=>devLabel(d)+(d.serial?' S/N '+d.serial:'')+(d.nextService?' ďalšia '+fmt(d.nextService):'')).join('; '),
+    'GPS Lat':c.lat||'','GPS Lng':c.lng||'','Poznámky':c.notes||'',
+    'Počet servisov':(c.history||[]).length
+  }));
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  // Column widths
+  ws['!cols']=[{wch:22},{wch:16},{wch:14},{wch:20},{wch:22},{wch:16},{wch:22},{wch:10},{wch:10},{wch:14},{wch:18},{wch:20},{wch:14},{wch:14},{wch:10},{wch:10},{wch:30},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'Zákazníci');
+
+  // History sheet
+  const hRows=[];
+  custs.forEach(c=>(c.history||[]).forEach(h=>{hRows.push({'Zákazník':c.name,'Dátum':fmt(h.date),'Typ':h.type,'Popis':h.desc,'Práca (€)':h.labor||0,'Diely (€)':h.parts||0,'Celkom (€)':((parseFloat(h.labor)||0)+(parseFloat(h.parts)||0)),'Technik':h.tech||''});}));
+  if(hRows.length){const ws2=XLSX.utils.json_to_sheet(hRows);XLSX.utils.book_append_sheet(wb,ws2,'História servisov');}
+
+  XLSX.writeFile(wb,'ServisKotlov-'+todayISO()+'.xlsx');
+}
 
 
 // ═══════════════════════════════════════════════
@@ -2960,12 +3408,273 @@ async function scanFromPhoto(e){
 // ═══════════════════════════════════════════════
 // GOOGLE DRIVE BACKUP
 // ═══════════════════════════════════════════════
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_FILE_NAME = 'ServisKotlov-zaloha.json';
+let driveToken = null;
+let driveFileId = localStorage.getItem('sk2_driveFileId') || null;
+let driveFileMeta = null;
+// Token platí asi hodinu; po vypršaní sa treba pripojiť znova.
+function driveTokenOK(){
+  if(!driveToken) return false;
+  const exp=parseInt(localStorage.getItem('sk2_driveTokenExpiry')||'0');
+  if(exp && Date.now()>exp-30000){ driveToken=null; updateDriveUI(); return false; }
+  return true;
+}
+// Toto zariadenie už do zálohy na Drive zapisovalo alebo z nej obnovovalo.
+// Kým to tak nie je, cudziu zálohu neprepíše bez výslovného súhlasu a nikdy nie automaticky.
+function driveLinked(){ return localStorage.getItem('sk2_driveLinked')==='1' || !!localStorage.getItem('sk2_driveLastBackup'); }
 
 // ═══════════════════════════════════════════════
 // ZÁLOHA DO PRIEČINKA V TELEFÓNE / POČÍTAČI
 // (Chrome na Androide a na počítači; iPhone to nepodporuje)
 // ═══════════════════════════════════════════════
+const FOLDER_SUPPORTED = (typeof window.showDirectoryPicker === 'function');
+const FOLDER_FILE = 'ServisKotlov-zaloha.json';
+let folderHandle = null;
 
+async function loadFolderHandle(){
+  if(!FOLDER_SUPPORTED) return null;
+  try{ await openDB(); folderHandle = await idbGet('dirHandle') || null; }catch(e){}
+  return folderHandle;
+}
+async function folderPermission(h, request){
+  if(!h || !h.queryPermission) return true;
+  const opts={mode:'readwrite'};
+  if(await h.queryPermission(opts)==='granted') return true;
+  if(request && await h.requestPermission(opts)==='granted') return true;
+  return false;
+}
+async function pickBackupFolder(){
+  if(!FOLDER_SUPPORTED){
+    alert('Tento prehliadač nevie zapisovať do priečinka.\n\nFunguje v Chrome na Androide a na počítači. Na iPhone to Apple nepovoľuje — použi Export JSON alebo Google Drive.');
+    return;
+  }
+  try{
+    const h = await window.showDirectoryPicker({mode:'readwrite', id:'serviskotlov'});
+    folderHandle = h;
+    await idbSet('dirHandle', h);
+    updateFolderUI();
+    showToast('📁 Priečinok nastavený');
+    await backupToFolder();
+  }catch(e){ if(e && e.name!=='AbortError') alert('Priečinok sa nepodarilo nastaviť: '+e.message); }
+}
+async function backupToFolder(silent){
+  if(!FOLDER_SUPPORTED) return false;
+  if(!storageReady || storageWiped || storageFailed){ if(!silent) alert('Dáta nie sú načítané — zálohu nerobím, aby som neprepísal tú existujúcu.'); return false; }
+  if(!custs.length){
+    if(silent) return false;
+    if(!confirm('V aplikácii nie sú žiadni zákazníci.\nNaozaj prepísať zálohu v priečinku prázdnou?')) return false;
+  }
+  if(!folderHandle) await loadFolderHandle();
+  if(!folderHandle){ if(!silent) alert('Najprv vyber priečinok.'); return false; }
+  if(!(await folderPermission(folderHandle, true))){
+    if(!silent) alert('Prístup k priečinku nebol povolený.');
+    return false;
+  }
+  try{
+    const data = JSON.stringify({custs, settings, ts:Date.now(), version:3}, null, 2);
+    const fh = await folderHandle.getFileHandle(FOLDER_FILE, {create:true});
+    const w  = await fh.createWritable();
+    await w.write(data); await w.close();
+    localStorage.setItem('sk2_folderLastBackup', String(Date.now()));
+    updateFolderUI(); renderBackupBanner();
+    if(!silent) showToast('📁 Záloha uložená do priečinka ('+fmtBytes(data.length)+')');
+    return true;
+  }catch(e){
+    console.error(e);
+    if(!silent) alert('Zápis do priečinka zlyhal: '+e.message);
+    return false;
+  }
+}
+async function restoreFromFolder(){
+  if(!folderHandle) await loadFolderHandle();
+  if(!folderHandle){ alert('Najprv vyber priečinok.'); return; }
+  if(!(await folderPermission(folderHandle, true))){ alert('Prístup k priečinku nebol povolený.'); return; }
+  try{
+    const fh = await folderHandle.getFileHandle(FOLDER_FILE);
+    const txt = await (await fh.getFile()).text();
+    let d;
+    try{ d = JSON.parse(txt); }catch(err){ alert('❌ Súbor zálohy v priečinku je poškodený.\n\nNič sa nezmenilo.'); return; }
+    if(await applyBackup(d,'priečinok')){
+      loadSett();
+      alert('✅ Obnovené: '+custs.length+' zákazníkov\nZáloha z: '+(d.ts?new Date(d.ts).toLocaleString('sk-SK'):'—'));
+    }
+  }catch(e){ alert('Obnova zlyhala: '+e.message); }
+}
+async function forgetFolder(){
+  folderHandle=null;
+  try{ await idbSet('dirHandle', null); }catch(e){}
+  localStorage.removeItem('sk2_folderLastBackup');
+  updateFolderUI();
+}
+async function updateFolderUI(){
+  const box=document.getElementById('folderBox'); if(!box)return;
+  if(!FOLDER_SUPPORTED){
+    box.innerHTML='<div style="font-family:var(--mono);font-size:10.5px;color:var(--muted);line-height:1.7">'
+      +'Tento prehliadač nevie zapisovať priamo do priečinka.<br>'
+      +'Funguje v <b style="color:var(--text)">Chrome na Androide</b> a na počítači. '
+      +'Na iPhone to Apple nepovoľuje — použi <b style="color:var(--text)">Export JSON</b> (uloží sa do Súborov) alebo Google Drive.</div>';
+    return;
+  }
+  if(!folderHandle) await loadFolderHandle();
+  const last=localStorage.getItem('sk2_folderLastBackup');
+  box.innerHTML = folderHandle
+    ? `<div style="font-family:var(--mono);font-size:11px;color:var(--accent3);margin-bottom:8px">📁 Priečinok: ${esc(folderHandle.name||'nastavený')}</div>
+       ${last?`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px">⏱ Posledná záloha: ${new Date(parseInt(last)).toLocaleString('sk-SK')}</div>`:''}
+       <button class="btn btn-o" onclick="backupToFolder()">💾 Zálohovať do priečinka</button>
+       <button class="btn btn-s" style="margin-top:6px" onclick="restoreFromFolder()">⬇️ Obnoviť z priečinka</button>
+       <button class="btn btn-s" style="margin-top:6px" onclick="pickBackupFolder()">📁 Zmeniť priečinok</button>
+       <button class="btn btn-d" style="margin-top:6px" onclick="forgetFolder()">✕ Zabudnúť priečinok</button>`
+    : `<div style="font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-bottom:8px">Vyber priečinok v telefóne, do ktorého sa bude ukladať záloha.</div>
+       <button class="btn btn-o" onclick="pickBackupFolder()">📁 Vybrať priečinok</button>`;
+}
+
+function showDriveHelp(){
+  document.getElementById('driveHelpModal').classList.add('open');
+}
+
+function loadDriveSettings(){
+  const cid = settings.driveClientId || '';
+  document.getElementById('driveClientId').value = cid;
+  updateDriveUI();
+}
+
+function updateDriveUI(){
+  const connected = driveTokenOK();
+  const hasCid = !!(settings.driveClientId||document.getElementById('driveClientId')?.value);
+  const dot = document.getElementById('driveStatusDot');
+  const txt = document.getElementById('driveStatusText');
+  const sub = document.getElementById('driveStatusSub');
+  const last = document.getElementById('driveLastBackup');
+
+  if(connected){
+    dot.style.background = 'var(--accent3)';
+    txt.textContent = '✅ Pripojené k Google Drive';
+    const exp=parseInt(localStorage.getItem('sk2_driveTokenExpiry')||'0');
+    sub.textContent = 'Pripojenie platí'+(exp?' do '+new Date(exp).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):' asi hodinu')+' — potom sa pripoj znova';
+    document.getElementById('driveConnectBtn').style.display = 'none';
+    document.getElementById('driveBackupBtn').style.display = 'block';
+    document.getElementById('driveRestoreBtn').style.display = 'block';
+    document.getElementById('driveDisconnectBtn').style.display = 'block';
+    document.getElementById('driveSetupSection').style.display = 'none';
+  } else {
+    dot.style.background = hasCid ? 'var(--warn)' : 'var(--muted)';
+    txt.textContent = hasCid ? '⚡ Client ID nastavený' : 'Nepripojené';
+    sub.textContent = hasCid ? 'Klikni Pripojiť' : 'Zadaj Client ID pre aktiváciu';
+    document.getElementById('driveConnectBtn').style.display = 'block';
+    document.getElementById('driveBackupBtn').style.display = 'none';
+    document.getElementById('driveRestoreBtn').style.display = 'none';
+    document.getElementById('driveDisconnectBtn').style.display = 'none';
+    document.getElementById('driveSetupSection').style.display = 'block';
+  }
+
+  const lastTs = localStorage.getItem('sk2_driveLastBackup');
+  if(lastTs){
+    last.style.display = 'block';
+    last.textContent = '⏱ Posledná záloha: ' + new Date(parseInt(lastTs)).toLocaleString('sk-SK');
+  }
+}
+
+function renderDriveDiag(){
+  const el=document.getElementById('driveDiag'); if(!el)return;
+  const isFile = location.protocol==='file:';
+  const origin = isFile ? '—' : location.origin;
+  const redirect = isFile ? '—' : (location.origin+location.pathname);
+  el.innerHTML = isFile
+   ? `<div style="color:var(--danger);font-weight:600;margin-bottom:6px">⚠️ Aplikácia beží zo súboru (file://)</div>
+      Google prihlásenie takto nefunguje — vyžaduje webovú adresu (https alebo http://localhost).
+      Nahraj aplikáciu na web (GitHub Pages, Netlify) a otvor ju odtiaľ.
+      Zálohovanie cez <b style="color:var(--text)">Export JSON</b> funguje aj takto.`
+   : `<div style="color:var(--accent);font-weight:600;margin-bottom:6px">Adresy do Google Cloud Console</div>
+      <div>Authorised JavaScript origin:</div>
+      <div style="color:var(--accent3);word-break:break-all;margin-bottom:6px">${esc(origin)}</div>
+      <div>Authorised redirect URI:</div>
+      <div style="color:var(--accent3);word-break:break-all">${esc(redirect)}</div>
+      <button class="btn btn-s" style="margin-top:8px;padding:7px;font-size:11px"
+        data-v="${esc(redirect)}" onclick="navigator.clipboard.writeText(this.dataset.v).then(()=>showToast('✅ Skopírované'))">📋 Kopírovať redirect URI</button>`;
+}
+
+function driveConnect(){
+  const cid = document.getElementById('driveClientId').value.trim();
+  if(!cid){ alert('Zadaj Google OAuth Client ID'); return; }
+  if(!/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(cid)){
+    alert('Client ID nevyzerá správne.\n\nMá tvar:\n123456789012-abcd....apps.googleusercontent.com\n\nSkontroluj, či si skopíroval celý reťazec z Google Cloud Console (Credentials → OAuth 2.0 Client IDs) — nie Client secret ani API key.');
+    return;
+  }
+  if(location.protocol==='file:'){
+    alert('Aplikácia je otvorená ako lokálny súbor (file://).\n\nGoogle prihlásenie vyžaduje webovú adresu. Nahraj aplikáciu napr. na GitHub Pages alebo Netlify a otvor ju cez https://...\n\nDovtedy použi Export / Import JSON.');
+    return;
+  }
+  settings.driveClientId = cid;
+  saveSett();
+  // Náhodná značka: po návrate z Google prijmeme prihlásenie len vtedy, ak sme oň žiadali my.
+  const oauthState = 'drive_'+uid()+uid();
+  localStorage.setItem('sk2_oauthState', JSON.stringify({s:oauthState, t:Date.now()}));
+
+  // Redirect flow — funguje na iOS Safari, Android Chrome aj desktop
+  const redirectUri = window.location.origin + window.location.pathname;
+  const params = new URLSearchParams({
+    client_id: cid,
+    redirect_uri: redirectUri,
+    response_type: 'token',
+    scope: DRIVE_SCOPE,
+    include_granted_scopes: 'true',
+    state: oauthState
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
+
+function handleOAuthRedirect(){
+  const hash = window.location.hash;
+  if(!hash || hash.indexOf('access_token')===-1) return;
+  const params = new URLSearchParams(hash.substring(1));
+  const token = params.get('access_token');
+  const state = params.get('state');
+  history.replaceState(null, '', window.location.pathname);      // token nenechávame v adrese
+  let want=null; try{ want=JSON.parse(localStorage.getItem('sk2_oauthState')||'null'); }catch(e){}
+  localStorage.removeItem('sk2_oauthState');
+  const ok = token && want && want.s && state===want.s && (Date.now()-want.t) < 15*60*1000;
+  if(!ok){
+    setTimeout(() => alert('⚠️ Prihlásenie do Google Drive bolo odmietnuté.\n\n'
+      + 'Aplikácia oň v tejto chvíli nežiadala (alebo prihlasovanie trvalo príliš dlho). '
+      + 'Ak si sa chcel pripojiť, skús to znova tlačidlom v Nastaveniach.'), 400);
+    return;
+  }
+  driveToken = token;
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
+  localStorage.setItem('sk2_driveTokenExpiry', String(Date.now() + expiresIn * 1000));
+  updateDriveUI();
+  pg('settings');
+  setTimeout(() => alert('✅ Google Drive pripojený!\n\n'
+    + (driveLinked() ? 'Môžeš zálohovať alebo obnoviť databázu.'
+       : 'Ak už na Drive máš zálohu z iného zariadenia, zvoľ „Obnoviť zálohu z Google Drive“.\nZálohovať odtiaľto znamená prepísať ju dátami z tohto zariadenia.')), 400);
+}
+
+function driveDisconnect(){
+  driveToken = null;
+  driveFileId = null;
+  localStorage.removeItem('sk2_driveFileId');
+  updateDriveUI();
+  alert('Odpojené od Google Drive.');
+}
+
+// Vyhľadá súbor na Drive podľa mena — funguje na PC aj mobile
+async function driveFindFile(){
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=name%3D'${DRIVE_FILE_NAME}'%20and%20trashed%3Dfalse&fields=files(id,name,modifiedTime)`,
+    { headers:{'Authorization':'Bearer '+driveToken} }
+  );
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  const data = await resp.json();
+  driveFileMeta = null;
+  if(data.files && data.files.length > 0){
+    driveFileMeta = data.files[0];
+    driveFileId = data.files[0].id;
+    localStorage.setItem('sk2_driveFileId', driveFileId);
+    return driveFileId;
+  }
+  return null;
+}
 
 function compressPhoto(src, maxPx, quality){
   return new Promise(resolve => {
@@ -2987,6 +3696,154 @@ function compressPhoto(src, maxPx, quality){
   });
 }
 
+async function driveBackup(auto){
+  auto = auto===true;
+  if(!driveTokenOK()){ if(!auto) alert('Prihlásenie do Google Drive vypršalo.\nPripoj sa znova.'); return; }
+  if(!storageReady || storageWiped || storageFailed){
+    if(!auto) alert('Dáta nie sú načítané — zálohu nerobím, aby som neprepísal tú existujúcu.');
+    return;
+  }
+  const linked = driveLinked();
+  const lastCount = parseInt(localStorage.getItem('sk2_driveLastCount')||'0');
+  const shrunk = lastCount>=4 && custs.length < lastCount*0.5;
+  // Automatická záloha nikdy neprepíše zálohu, ktorú toto zariadenie nepozná,
+  // ani ju nenahradí prázdnou či výrazne menšou databázou.
+  if(auto && (!linked || !custs.length || shrunk)) return;
+  if(!auto && !custs.length && !confirm('V aplikácii nie sú žiadni zákazníci.\nNaozaj prepísať zálohu na Google Drive prázdnou?')) return;
+  if(!auto && shrunk && !confirm('Pri poslednej zálohe bolo '+lastCount+' zákazníkov, teraz ich je '+custs.length+'.\n\nNaozaj prepísať zálohu na Google Drive?')) return;
+
+  const btn = document.getElementById('driveBackupBtn');
+  const resetBtn = ()=>{ btn.textContent='☁️ Zálohovať teraz do Google Drive'; btn.disabled=false; };
+  btn.textContent = '⏳ Zálohujem...';
+  btn.disabled = true;
+
+  try {
+    // Vždy najprv vyhľadaj súbor podľa mena (synchronizácia PC <-> mobil)
+    const existingId = await driveFindFile();
+    if(existingId && !linked){
+      const when = driveFileMeta && driveFileMeta.modifiedTime ? new Date(driveFileMeta.modifiedTime).toLocaleString('sk-SK') : 'dátum neznámy';
+      if(!confirm('Na Google Drive už je záloha ('+when+').\n'
+        + 'Toto zariadenie do nej ešte nezálohovalo ani z nej neobnovovalo.\n\n'
+        + 'PREPÍSAŤ ju dátami z tohto zariadenia ('+custs.length+' zákazníkov)?\n\n'
+        + 'Ak chceš naopak dáta zo zálohy, zvoľ Zrušiť a použi „Obnoviť zálohu z Google Drive“.')){ resetBtn(); return; }
+    }
+
+    // Komprimovať fotky pred zálohou (max 800px, 60% kvalita); podpis pôvodnej fotky
+    // umožní pri obnove na tomto zariadení ponechať fotku v plnej kvalite.
+    const custsForBackup = await Promise.all(custs.map(async c => {
+      const photos = await Promise.all((c.photos||[]).map(src => compressPhoto(src, 800, 0.6)));
+      return {...c, photos, photoSig:(c.photos||[]).map(photoSig)};
+    }));
+    const data = JSON.stringify({custs: custsForBackup, settings, ts: Date.now(), version: 3}, null, 2);
+    const blob = new Blob([data], {type:'application/json'});
+
+    let resp;
+    if(existingId){
+      resp = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`,
+        { method:'PATCH', headers:{'Authorization':'Bearer '+driveToken,'Content-Type':'application/json'}, body: blob }
+      );
+    } else {
+      // Súbor neexistuje — vytvor nový
+      const meta = JSON.stringify({name: DRIVE_FILE_NAME, mimeType:'application/json'});
+      const form = new FormData();
+      form.append('metadata', new Blob([meta],{type:'application/json'}));
+      form.append('file', blob);
+      resp = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        { method:'POST', headers:{'Authorization':'Bearer '+driveToken}, body: form }
+      );
+      if(resp.ok){
+        const json = await resp.json();
+        driveFileId = json.id;
+        localStorage.setItem('sk2_driveFileId', driveFileId);
+      }
+    }
+
+    if(resp && resp.ok){
+      localStorage.setItem('sk2_driveLastBackup', String(Date.now()));
+      localStorage.setItem('sk2_driveLinked', '1');
+      localStorage.setItem('sk2_driveLastCount', String(custs.length));
+      btn.textContent = '✅ Zálohované!';
+      updateDriveUI(); renderBackupBanner();
+      setTimeout(resetBtn, 2500);
+    } else {
+      throw new Error('HTTP ' + (resp?resp.status:'?'));
+    }
+  } catch(e){
+    btn.textContent = '❌ Chyba zálohy';
+    btn.disabled = false;
+    if(e.message.includes('401') || e.message.includes('403')){
+      driveToken = null; updateDriveUI();
+      if(!auto) alert('Prihlásenie vypršalo. Prihlás sa znova.');
+    } else if(!auto){
+      alert('Chyba zálohy: ' + e.message);
+    }
+    setTimeout(resetBtn, 2000);
+  }
+}
+
+async function driveRestore(){
+  if(!driveTokenOK()){ alert('Najprv sa prihlás do Google Drive'); return; }
+  const btn = document.getElementById('driveRestoreBtn');
+  const resetBtn = ()=>{ btn.textContent='⬇️ Obnoviť zálohu z Google Drive'; btn.disabled=false; };
+  btn.textContent = '⏳ Hľadám zálohu...';
+  btn.disabled = true;
+
+  try {
+    // Vždy vyhľadaj podľa mena — funguje na PC aj mobile bez uloženého fileId
+    const foundId = await driveFindFile();
+    if(!foundId){
+      resetBtn();
+      alert('Žiadna záloha nenájdená na Google Drive.\nNajprv ju vytvor na zariadení, kde sú dáta.');
+      return;
+    }
+    btn.textContent = '⏳ Sťahujem...';
+    const resp = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${foundId}?alt=media`,
+      { headers:{'Authorization':'Bearer '+driveToken} }
+    );
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    let data;
+    try{ data = await resp.json(); }catch(err){ resetBtn(); alert('❌ Záloha na Google Drive je poškodená.\n\nNič sa nezmenilo.'); return; }
+    resetBtn();
+    if(await applyBackup(data,'Google Drive')){
+      localStorage.setItem('sk2_driveLinked', '1');
+      localStorage.setItem('sk2_driveLastCount', String(custs.length));
+      loadSett();
+      alert('✅ Záloha obnovená!\n' + custs.length + ' zákazníkov načítaných.\nZálohovaná: ' + (data.ts ? new Date(data.ts).toLocaleString('sk-SK') : '—')
+        + '\n\nFotky v zálohe na Drive sú zmenšené; tie, ktoré toto zariadenie malo, ostali v plnej kvalite.');
+    }
+  } catch(e){
+    resetBtn();
+    if(e.message.includes('401') || e.message.includes('403')){
+      driveToken = null; updateDriveUI();
+      alert('Prihlásenie vypršalo. Prihlás sa znova.');
+    } else {
+      alert('Chyba obnovy: ' + e.message);
+    }
+  }
+}
+
+// Automatická záloha pri odchode z aplikácie (najviac raz denne)
+async function autoFolderBackup(){
+  if(!FOLDER_SUPPORTED) return;
+  const last = parseInt(localStorage.getItem('sk2_folderLastBackup')||'0');
+  if((Date.now()-last)/3600000 < 23) return;
+  if(!folderHandle) await loadFolderHandle();
+  if(!folderHandle) return;
+  try{ if(folderHandle.queryPermission && await folderHandle.queryPermission({mode:'readwrite'})!=='granted') return; }catch(e){ return; }
+  await backupToFolder(true);
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(!document.hidden) return;
+  if(!storageReady || storageWiped || storageFailed || !custs.length) return;
+  autoFolderBackup().catch(()=>{});
+  if(driveTokenOK()){
+    const last = parseInt(localStorage.getItem('sk2_driveLastBackup')||'0');
+    if((Date.now()-last)/3600000 >= 23) driveBackup(true);
+  }
+});
 
 // ═══════════════════════════════════════════════
 // CLOSE ON BG CLICK
@@ -3005,6 +3862,7 @@ document.addEventListener('keydown', e=>{
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
+handleOAuthRedirect();
 loadSett();
 renderDash();
 renderCusts();
