@@ -1260,6 +1260,10 @@ let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
 const SKLicense = (() => {
   const SERVER = 'https://serviskotlov-licencie-v2.gappa1972.workers.dev';   // adresa Workera
   const PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: 'rILudfx8BtGNqqMheZYQ0Xd7OGkXVJNghgwjMMK_QVw', y: '2pflPOJUtYpr7wWuS4gE6A8hLMQegFLIFBVfurhoarc' }; // verejný kľúč z keygen.html
+  // Verejný podpisový kľúč PRO modulu z keygen.html. Kým je null, modul sa spúšťa bez overenia podpisu.
+  // Po vložení kľúča aplikácia spustí len modul podpísaný v admin.html zodpovedajúcim súkromným kľúčom —
+  // podpísaný modul preto nahraj na server SKÔR, než túto verziu aplikácie zverejníš.
+  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
 
@@ -1278,6 +1282,7 @@ const SKLicense = (() => {
 
   let payload = null; // overený obsah tokenu, alebo null
   let pubKey = null;
+  let modKey = null;
   let proVersion = null; // verzia práve spusteného PRO modulu
   const api = { onChange: null, onProLoaded: null };
 
@@ -1307,8 +1312,30 @@ const SKLicense = (() => {
   };
   api._store = store;
 
-  function runModule(mod) {
+  // Podpis modulu: platí pre kód bez úvodnej značky licencie; značka smie byť len v presnom tvare.
+  async function moduleOk(mod) {
+    if (!MODULE_PUBLIC_JWK) return true;
+    try {
+      const code = String((mod && mod.code) || ''), n = (mod && mod.markLen) | 0;
+      if (!mod || !mod.sig || n < 0 || n > 40) return false;
+      if (n && !/^var __skl="[A-Z0-9]{0,5}";\n$/.test(code.slice(0, n))) return false;
+      modKey = modKey || await crypto.subtle.importKey(
+        'jwk', MODULE_PUBLIC_JWK, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+      return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, modKey,
+        unb64url(mod.sig), new TextEncoder().encode(code.slice(n)));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function runModule(mod) {
     if (!mod || !mod.code || proVersion) return; // novšia verzia sa použije pri ďalšom štarte
+    if (!(await moduleOk(mod))) {
+      console.error('PRO modul nemá platný podpis — nespustí sa');
+      api._store.del('pro').catch(() => {});
+      return;
+    }
+    if (proVersion) return;
     try {
       globalThis.SKPro = null;
       if (typeof document !== 'undefined' && document.head) {
@@ -1334,7 +1361,7 @@ const SKLicense = (() => {
 
   async function loadPro() {
     if (!api.isPro()) return false;
-    try { runModule(await api._store.get('pro')); } catch (_) {}
+    try { await runModule(await api._store.get('pro')); } catch (_) {}
     return api.proReady();
   }
 
@@ -1342,15 +1369,17 @@ const SKLicense = (() => {
     if (!api.isPro()) return;
     let cached = null;
     try { cached = await api._store.get('pro'); } catch (_) {}
+    if (cached && !(await moduleOk(cached))) cached = null; // nepodpísaná alebo pozmenená kópia — stiahne sa nanovo
     const r = await call('/module', {
       key: localStorage.getItem(LS.key), deviceId: deviceId(), have: cached ? cached.version : '',
     });
     if (r.ok && r.code) {
-      const mod = { version: r.version, code: r.code };
+      const mod = { version: r.version, code: r.code, sig: r.sig || '', markLen: r.markLen | 0 };
+      if (!(await moduleOk(mod))) { console.error('Server vydal PRO modul bez platného podpisu — odmietnutý'); return; }
       try { await api._store.set('pro', mod); } catch (_) {}
-      runModule(mod);
+      await runModule(mod);
     } else if (cached) {
-      runModule(cached);
+      await runModule(cached);
     }
   }
 
