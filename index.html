@@ -356,7 +356,7 @@ input[type="file"]{display:none;}
     <div class="sc a"><div class="n" id="sTotal">0</div><div class="l">zákazníkov</div></div>
     <div class="sc g"><div class="n" id="sOk">0</div><div class="l">v poriadku</div></div>
     <div class="sc w"><div class="n" id="sWarn">0</div><div class="l">do 30 dní</div></div>
-    <div class="sc d"><div class="n" id="sDanger">0</div><div class="l">po termíne</div></div>
+    <div class="sc d"><div class="n" id="sDanger">0</div><div class="l">po termíne / do 7 dní</div></div>
   </div>
   <div class="stitle">⚠️ Vyžadujú pozornosť</div>
   <div id="alertList"><div class="empty"><div class="empty-ic">✅</div>Všetci v poriadku</div></div>
@@ -373,7 +373,7 @@ input[type="file"]{display:none;}
   </div>
   <div class="chips">
     <div class="chip active" onclick="setF('all',this)">Všetci</div>
-    <div class="chip" onclick="setF('ov',this)">‼️ Po termíne</div>
+    <div class="chip" onclick="setF('ov',this)">‼️ Súrne</div>
     <div class="chip" onclick="setF('w',this)">⚠️ Blíži sa</div>
     <div class="chip" onclick="setF('ok',this)">✅ OK</div>
   </div>
@@ -500,6 +500,7 @@ input[type="file"]{display:none;}
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('importFile').click()">📥 Import JSON</button>
   <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
   <button class="btn btn-s" id="undoRestoreBtn" style="margin-top:6px;display:none" onclick="restorePrevData()">↩️ Vrátiť dáta spred poslednej obnovy</button>
+  <button class="btn btn-o" id="lightRestoreBtn" style="margin-top:6px;display:none" onclick="restoreFromLight()">🛟 Obnoviť zo záchrannej kópie (bez fotiek)</button>
   <button class="btn btn-d" style="margin-top:12px" onclick="clearAll()">🗑️ Vymazať všetky dáta</button>
 </div>
 
@@ -571,7 +572,7 @@ input[type="file"]{display:none;}
     <div class="fg"><label class="fl">E-mail</label><input class="fi" id="fEmail" type="email" inputmode="email" autocomplete="off" placeholder="zakaznik@email.sk"></div>
     <div class="frow">
       <div class="fg"><label class="fl">Adresa</label><input class="fi" id="fAddr" placeholder="Ulica 12"></div>
-      <div class="fg"><label class="fl">PSČ</label><input class="fi" id="fPsc" type="text" inputmode="numeric" placeholder="90501" maxlength="5"></div>
+      <div class="fg"><label class="fl">PSČ</label><input class="fi" id="fPsc" type="text" inputmode="numeric" placeholder="905 01" maxlength="6"></div>
     </div>
     <div class="frow">
       <div class="fg"><label class="fl">Posledná prehliadka</label><input class="fi" id="fLast" type="date"></div>
@@ -910,7 +911,9 @@ let lastSaveReloaded = false;  // save() namiesto zápisu načítal novší stav
 function countPhotos(arr){
   return (arr||[]).reduce((n,c)=>n+((c&&c.photos||[]).length),0);
 }
-let settings = JSON.parse(localStorage.getItem('sk2_settings')||'{"interval":12,"name":"","phone":"","firma":"","addr":""}');
+let settings = null;
+try{ settings = JSON.parse(localStorage.getItem('sk2_settings')||'null'); }catch(e){ console.error('sk2_settings', e); }
+if(!settings || typeof settings!=='object' || Array.isArray(settings)) settings = {interval:12,name:'',phone:'',firma:'',addr:''};
 // predvolené firemné údaje (doplnia sa len ak chýbajú)
 {
   const D={firma:'',addr:'',ico:'',
@@ -918,7 +921,7 @@ let settings = JSON.parse(localStorage.getItem('sk2_settings')||'{"interval":12,
     web:'',opravnenie:'',analyzer:'',analyzerCal:'',protoSeq:0};
   let ch=false;
   for(const k in D){ if(settings[k]===undefined||settings[k]===''){ if(D[k]!==''){settings[k]=D[k];ch=true;} else if(settings[k]===undefined){settings[k]='';ch=true;} } }
-  if(ch)localStorage.setItem('sk2_settings',JSON.stringify(settings));
+  if(ch){ try{ localStorage.setItem('sk2_settings',JSON.stringify(settings)); }catch(e){} }
 }
 let editId = null, detailId = null;
 let filterVal = 'all';
@@ -971,12 +974,34 @@ function openDB(){
       const d=e.target.result;
       if(!d.objectStoreNames.contains('kv')) d.createObjectStore('kv');
     };
-    req.onsuccess = e=>{ DB=e.target.result; res(DB); };
-    req.onerror   = ()=>res(null);
-    req.onblocked = ()=>res(null);
+    req.onsuccess = e=>{
+      DB=e.target.result;
+      // spojenie môže zrušiť systém (iPhone po návrate z pozadia) — nabudúce sa otvorí znova
+      DB.onclose = ()=>{ DB=null; dbReady=null; };
+      DB.onversionchange = ()=>{ try{ DB.close(); }catch(_){} DB=null; dbReady=null; };
+      res(DB);
+    };
+    req.onerror   = ()=>{ dbReady=null; res(null); };
+    req.onblocked = ()=>{ dbReady=null; res(null); };
     setTimeout(()=>res(DB), 15000);  // poistka proti zaseknutiu (pomalý štart telefónu trvá aj niekoľko sekúnd)
   });
   return dbReady;
+}
+function reopenDB(){
+  try{ if(DB) DB.close(); }catch(e){}
+  DB=null; dbReady=null;
+  return openDB();
+}
+function isQuotaErr(e){ return !!e && (e.name==='QuotaExceededError' || /quota/i.test(String(e.message||''))); }
+// Operácia nad IndexedDB; pri zlyhaní (okrem plného úložiska) raz otvorí spojenie znova a zopakuje ju.
+async function idbTry(fn){
+  try{ return await fn(); }
+  catch(e){
+    if(isQuotaErr(e)) throw e;
+    await reopenDB();
+    if(!DB) throw e;
+    return await fn();
+  }
 }
 function idbGet(key){
   return new Promise((res,rej)=>{
@@ -1003,8 +1028,10 @@ function idbSet(key,val){
 // Malá kópia bez fotiek – poistka, keby IndexedDB zlyhala
 function mirrorToLocalStorage(){
   try{
-    const light = custs.map(c=>{const o={...c}; delete o.photos; return o;});
-    localStorage.setItem('sk2_custs_light', JSON.stringify(light));
+    const light = JSON.stringify(custs.map(c=>{const o={...c}; delete o.photos; return o;}));
+    // nastavenia sú v tom istom sklade (~5 MB) — kópia im nesmie zabrať miesto
+    if(light.length>1500000){ localStorage.removeItem('sk2_custs_light'); return; }
+    localStorage.setItem('sk2_custs_light', light);
   }catch(e){ try{ localStorage.removeItem('sk2_custs_light'); }catch(e2){} }
 }
 
@@ -1037,6 +1064,14 @@ async function save(opts){
     if(ex){try{const p=JSON.parse(ex);if(p.length>0){console.warn('save() blocked empty overwrite');return false;}}catch(e){}}
   }
   await openDB();
+  if(!DB && localStorage.getItem('sk2_idb')){
+    // Dáta sú v IndexedDB, len spojenie sa stratilo. Núdzový režim by ich obišiel — skúsime ho otvoriť znova.
+    await reopenDB();
+    if(!DB){
+      showToast('⚠️ Úložisko neodpovedá — zatvor a znova otvor aplikáciu','var(--danger)');
+      return false;
+    }
+  }
   if(DB){
     try{
       // 2) Poistka: nikdy neuložiť stav, ktorý by ubral fotky alebo zákazníkov,
@@ -1047,6 +1082,7 @@ async function save(opts){
         if(cur !== myRev){
           await reloadFromStorage();
           lastSaveReloaded = true;
+          if(opts.quietReload) return false;   // volajúci zmenu zopakuje nad načítaným stavom
           closeAllModals();
           alert('⚠️ Dáta boli medzitým zmenené v inom okne alebo karte.\n\n'
             + 'Načítal som aktuálny stav, nič sa neprepísalo. Poslednú zmenu zadaj znova.');
@@ -1054,7 +1090,7 @@ async function save(opts){
         }
       }
       if(!opts.allowLess){
-        const stored = await idbGet('custs');
+        const stored = await idbTry(()=>idbGet('custs'));
         if(Array.isArray(stored)){
           const fotkyPred=countPhotos(stored), fotkyTeraz=countPhotos(custs);
           if(stored.length>custs.length){
@@ -1069,7 +1105,7 @@ async function save(opts){
           }
         }
       }
-      await idbSet('custs', custs);
+      await idbTry(()=>idbSet('custs', custs));
       bumpRev();
       try{ localStorage.setItem('sk2_idb','1'); }catch(e){}
       try{ localStorage.removeItem('sk2_custs'); }catch(e){}   // starý 5 MB sklad už netreba
@@ -1079,8 +1115,10 @@ async function save(opts){
     }catch(err){
       console.error('IndexedDB save failed', err);
       showToast('❌ Nepodarilo sa uložiť','var(--danger)');
-      alert('⚠️ Údaje sa NEULOŽILI — úložisko v telefóne je plné.\n\n'
+      if(isQuotaErr(err)) alert('⚠️ Údaje sa NEULOŽILI — úložisko v telefóne je plné.\n\n'
         + 'Urob zálohu (Nastavenia → Export JSON, priečinok alebo Google Drive) a vymaž staré fotky.');
+      else alert('⚠️ Údaje sa NEULOŽILI — úložisko telefónu neodpovedá.\n\n'
+        + 'Skús to ešte raz. Ak to nepomôže, úplne zatvor aplikáciu a otvor ju znova.\n\n('+(err&&err.name||'chyba')+')');
       return false;
     }
   }
@@ -1100,16 +1138,24 @@ async function save(opts){
 
 // Uloží; ak sa to nepodarí, vráti v pamäti posledný uložený stav,
 // aby aplikácia neukazovala zmenu, ktorá po reštarte zmizne.
+async function revertMem(){
+  if(!lastSaveReloaded){
+    if(DB) await reloadFromStorage();
+    else { try{ const a=JSON.parse(localStorage.getItem('sk2_custs')||'null'); if(Array.isArray(a)) custs=a; }catch(e){} }
+  }
+  renderDash(); renderCusts();
+}
 async function saveOrRevert(opts){
   const ok=await save(opts);
-  if(!ok){
-    if(!lastSaveReloaded){
-      if(DB) await reloadFromStorage();
-      else { try{ const a=JSON.parse(localStorage.getItem('sk2_custs')||'null'); if(Array.isArray(a)) custs=a; }catch(e){} }
-    }
-    renderDash(); renderCusts();
-  }
+  if(!ok) await revertMem();
   return ok;
+}
+// Poistka proti dvojitému ťuknutiu: kým beží jedno ukladanie, ďalšie sa nespustí.
+let uiBusy=false;
+async function once(fn){
+  if(uiBusy) return;
+  uiBusy=true;
+  try{ return await fn(); } finally{ uiBusy=false; }
 }
 
 // ── Súbeh viacerých okien / kariet ──────────────────────
@@ -1187,7 +1233,18 @@ async function updateStorageUI(){
       </div>`;
   }
 }
-function saveSett(){localStorage.setItem('sk2_settings',JSON.stringify(settings));}
+// Uloží nastavenia; vráti false, ak sa to nepodarilo (plná pamäť prehliadača).
+function saveSett(){
+  const data=JSON.stringify(settings);
+  try{ localStorage.setItem('sk2_settings',data); return true; }
+  catch(e){
+    // záchranná kópia zákazníkov je v tom istom 5 MB sklade — nastavenia majú prednosť
+    try{ localStorage.removeItem('sk2_custs_light'); localStorage.setItem('sk2_settings',data); return true; }catch(e2){}
+    console.error('saveSett', e);
+    showToast('⚠️ Nastavenia sa neuložili — pamäť prehliadača je plná','var(--danger)');
+    return false;
+  }
+}
 
 // ═══════════════════════════════════════════════
 // LICENCIA — bezplatne 10 zákazníkov a základné funkcie.
@@ -1206,13 +1263,14 @@ const SKLicense = (() => {
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
 
-  const LS = { key: 'sk_lic_key', token: 'sk_lic_token', dev: 'sk_lic_device', checked: 'sk_lic_checked', msg: 'sk_lic_msg' };
+  const LS = { key: 'sk_lic_key', token: 'sk_lic_token', dev: 'sk_lic_device', checked: 'sk_lic_checked', msg: 'sk_lic_msg', seen: 'sk_lic_seen' };
   const MESSAGES = {
     invalid_key: 'Licenčný kľúč nie je platný.',
     revoked: 'Táto licencia bola zrušená.',
     expired: 'Platnosť licencie vypršala.',
     device_limit: 'Licencia je už aktivovaná na maximálnom počte zariadení. Deaktivujte ju na inom zariadení.',
     device_not_active: 'Toto zariadenie už nie je aktivované. Zadajte kľúč znova.',
+    activation_limit: 'Licencia bola za posledných 30 dní aktivovaná na príliš veľa zariadeniach. Kontaktujte predajcu.',
     network: 'Server nie je dostupný. Skontrolujte pripojenie na internet.',
     no_server: 'Licenčný server ešte nie je nastavený.',
   };
@@ -1302,6 +1360,17 @@ const SKLicense = (() => {
     proVersion = null;
   }
 
+  // Čas, ktorý nejde dozadu: posunutím hodín v zariadení sa platnosť bez internetu nepredĺži.
+  // Po každom úspešnom overení sa zarovná podľa času servera (iat v tokene).
+  function nowT() {
+    const n = Date.now();
+    let s = 0;
+    try { s = Number(localStorage.getItem(LS.seen) || 0) || 0; } catch (_) {}
+    if (n > s + 60000) { try { localStorage.setItem(LS.seen, String(n)); } catch (_) {} }
+    return Math.max(n, s);
+  }
+  const stale = (last) => Math.abs(Date.now() - last) > CHECK_EVERY;
+
   function deviceId() {
     let id = localStorage.getItem(LS.dev);
     if (!id) {
@@ -1327,7 +1396,7 @@ const SKLicense = (() => {
     return Uint8Array.from(bin, (c) => c.charCodeAt(0));
   }
 
-  async function verify(token) {
+  async function verify(token, fresh) {
     try {
       const [p, s] = String(token || '').split('.');
       if (!p || !s) return null;
@@ -1337,17 +1406,19 @@ const SKLicense = (() => {
       const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, pubKey, unb64url(s), data);
       if (!ok) return null;
       const pl = JSON.parse(new TextDecoder().decode(data));
-      if (pl.plan !== 'pro' || pl.dev !== deviceId() || !(pl.until > Date.now())) return null;
+      if (pl.plan !== 'pro' || pl.dev !== deviceId()) return null;
+      if (fresh && pl.iat > 0) { try { localStorage.setItem(LS.seen, String(pl.iat)); } catch (_) {} }
+      if (!(pl.until > nowT())) return null;
       return pl;
     } catch (_) {
       return null;
     }
   }
 
-  async function setToken(token) {
+  async function setToken(token, fresh) {
     const sig = (p) => (p ? [p.limit || 0, p.exp || 0].join('|') : '-');
     const before = sig(payload);
-    payload = token ? await verify(token) : null;
+    payload = token ? await verify(token, fresh) : null;
     if (payload) localStorage.setItem(LS.token, token);
     else { localStorage.removeItem(LS.token); await dropPro(); }
     if (before !== sig(payload) && typeof api.onChange === 'function') api.onChange(); // aj pri zmene stupňa alebo platnosti
@@ -1374,7 +1445,7 @@ const SKLicense = (() => {
     const r = await call('/validate', { key, deviceId: deviceId() });
     if (r.ok) {
       localStorage.setItem(LS.checked, String(Date.now()));
-      await setToken(r.token);
+      await setToken(r.token, true);
       await syncPro();
     } else if (FATAL.includes(r.error)) {
       localStorage.setItem(LS.msg, MESSAGES[r.error]);
@@ -1387,15 +1458,15 @@ const SKLicense = (() => {
     if (payload) await loadPro(); // z úložiska zariadenia, funguje aj offline
     else if (localStorage.getItem(LS.token)) { localStorage.removeItem(LS.token); await dropPro(); }
     const last = Number(localStorage.getItem(LS.checked) || 0);
-    if (localStorage.getItem(LS.key) && Date.now() - last > CHECK_EVERY) {
-      refresh(); // na pozadí, štart aplikácie nezdržiava
+    if (localStorage.getItem(LS.key) && (stale(last) || !payload)) {
+      refresh(); // na pozadí, štart aplikácie nezdržiava (aj keď uložený token už neplatí)
     } else if (api.isPro() && !api.proReady()) {
       syncPro();
     }
     return api.isPro();
   };
 
-  api.isPro = () => !!payload && payload.until > Date.now();
+  api.isPro = () => !!payload && payload.until > nowT();
 
   api.proReady = () => api.isPro() && !!globalThis.SKPro;
 
@@ -1408,7 +1479,7 @@ const SKLicense = (() => {
     localStorage.setItem(LS.key, key);
     localStorage.setItem(LS.checked, String(Date.now()));
     localStorage.removeItem(LS.msg);
-    await setToken(r.token);
+    await setToken(r.token, true);
     await syncPro();
     return api.isPro()
       ? { ok: true, message: 'Licencia PRO je aktivovaná.' }
@@ -1419,7 +1490,8 @@ const SKLicense = (() => {
     const key = localStorage.getItem(LS.key);
     if (key) {
       const r = await call('/deactivate', { key, deviceId: deviceId() });
-      if (!r.ok) return { ok: false, message: MESSAGES.network };
+      // server nedostupný -> miesto ostáva obsadené; ak licenciu server nepozná, stačí ju odstrániť tu
+      if (!r.ok && !FATAL.includes(r.error) && r.error !== 'bad_device') return { ok: false, message: MESSAGES.network };
     }
     await api.forget();
     return { ok: true, message: 'Licencia bola na tomto zariadení deaktivovaná.' };
@@ -1436,7 +1508,7 @@ const SKLicense = (() => {
   // denné overenie na pozadí, napr. pri návrate do aplikácie
   api.maybeRefresh = function () {
     const last = Number(localStorage.getItem(LS.checked) || 0);
-    if (localStorage.getItem(LS.key) && Date.now() - last > CHECK_EVERY) refresh();
+    if (localStorage.getItem(LS.key) && stale(last)) refresh();
   };
 
   api.info = () => ({
@@ -1657,7 +1729,7 @@ async function removeLicense(){
   if(!confirm('Odstrániť licenciu z tohto zariadenia?\nDáta zostanú, aplikácia sa vráti do bezplatnej verzie.\nZariadenie sa uvoľní a licenciu môžeš aktivovať inde.'))return;
   const r=await SKLicense.deactivate();
   if(!r.ok){
-    if(!confirm('Bez internetu sa zariadenie na serveri neuvoľní (miesto ostane obsadené).\nOdstrániť licenciu aj tak?')) return;
+    if(!confirm('Licenčný server je teraz nedostupný — zariadenie sa na ňom neuvoľní (miesto ostane obsadené).\nOdstrániť licenciu aj tak?')) return;
     await SKLicense.forget();
   }
   // funkcie PRO sú ešte v pamäti — po znovunačítaní zmiznú
@@ -1665,8 +1737,9 @@ async function removeLicense(){
 }
 async function removeDemo(){
   if(!confirm('Odstrániť ukážkových zákazníkov?'))return;
+  const prevAll=custs;
   custs=custs.filter(c=>!c.demo);
-  await save({allowLess:true, allowEmpty:true});
+  if(!(await save({allowLess:true, allowEmpty:true}))){ if(!lastSaveReloaded) custs=prevAll; renderCusts(); renderDash(); return; }
   renderCusts(); renderDash(); renderLicUI();
   showToast('Ukážkoví zákazníci odstránení');
 }
@@ -1713,7 +1786,9 @@ async function bootStorage(){
         setTimeout(()=>alert('⚠️ Dáta v telefóne sa nenašli.\n\n'
           + 'Úložisko je prázdne, hoci tu predtým dáta boli — mohol ich vymazať systém '
           + 'alebo čistenie prehliadača.\n\nNič sa neprepísalo. Obnov zálohu:\n'
-          + 'Nastavenia → Obnoviť zálohu z Google Drive, alebo Import JSON.'), 600);
+          + 'Nastavenia → Obnoviť zálohu z Google Drive, alebo Import JSON.\n\n'
+          + 'Ak zálohu nemáš: v Nastaveniach použi „Obnoviť zo záchrannej kópie“ (ak je ponúknutá), '
+          + 'alebo „Vymazať všetky dáta“ a začni odznova.'), 600);
       } else {
         // Prvé spustenie: presun zo starého úložiska, ak tam niečo je
         let stare=null;
@@ -1786,19 +1861,37 @@ function devShort(c,id){
 }
 function effNext(c){ const ds=devList(c).map(d=>d.nextService).filter(isISO).sort(); return ds[0]||''; }
 function dueDev(c){ const l=devList(c).filter(d=>isISO(d.nextService)).sort((a,b)=>a.nextService.localeCompare(b.nextService)); return l[0]||devList(c)[0]; }
-function setDevDates(c,id,last,next){
+// Nastaví termíny zariadenia. Vráti pôvodné hodnoty {id,last,next} (dajú sa nimi vrátiť späť),
+// alebo null, ak sa nič nezmenilo.
+function setDevDates(c,id,last,next,force){
+  const sub=(id&&id!=='main')?(c.devices||[]).find(x=>x.id===id):null;
+  const d=sub||c;
   // Záznam starší ako posledná známa prehliadka termíny nemení
   // (oprava preklepu v starom zázname by inak vrátila termín o roky späť).
-  const cur=(getDev(c,id)||{}).lastService||'';
-  if(last && isISO(cur) && last<cur) return false;
-  if(!id||id==='main'){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
-  const d=(c.devices||[]).find(x=>x.id===id); if(!d){ if(last)c.lastService=last; if(next)c.nextService=next; return; }
+  const cur=d.lastService||'';
+  if(!force && last && isISO(cur) && last<cur) return null;
+  const prev={id:sub?id:'main', last:d.lastService||'', next:d.nextService||''};
   if(last)d.lastService=last; if(next)d.nextService=next;
+  return prev;
 }
+// Vymazaný záznam vráti termíny do stavu pred ním — ale len ak je stále posledným servisom zariadenia.
+function undoDevDates(c,e){
+  let n=0;
+  (e&&Array.isArray(e.pd)?e.pd:[]).forEach(p=>{
+    if(!p||typeof p!=='object') return;
+    const d=(p.id==='main')?c:(c.devices||[]).find(x=>x.id===p.id);
+    if(!d || (d.lastService||'')!==(e.date||'')) return;
+    d.lastService=isISO(p.last)?p.last:''; d.nextService=isISO(p.next)?p.next:''; n++;
+  });
+  return n;
+}
+// malé písmená bez diakritiky: „kovac“ nájde „Kováč“
+function fold(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function normSN(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
 function custMatches(c,q){
   if(!q) return true;
-  const txt=[c.name,c.city,c.phone,c.addr,c.email,...devList(c).flatMap(d=>[d.boilerBrand,d.model,d.serial,d.place])].join(' ').toLowerCase();
+  q=fold(q);
+  const txt=fold([c.name,c.city,c.psc,c.phone,c.addr,c.email,...devList(c).flatMap(d=>[d.boilerBrand,d.model,d.serial,d.place])].join(' '));
   if(txt.includes(q)) return true;
   const qn=normSN(q);
   return qn.length>=4 && devList(c).some(d=>d.serial&&normSN(d.serial).includes(qn));
@@ -2103,7 +2196,8 @@ function openEdit(id){
   document.getElementById('custModal').classList.add('open');
 }
 function closeCM(){document.getElementById('custModal').classList.remove('open');}
-async function saveCust(){
+function saveCust(){ return once(_saveCust); }
+async function _saveCust(){
   const name=document.getElementById('fName').value.trim();
   if(!name){alert('Zadajte meno');return;}
   if(!editId && !canAddCustomer()){ closeCM(); showLimitModal(); return; }
@@ -2156,8 +2250,12 @@ async function saveCust(){
   const np=(c.photos||[]).length;
   showToast((editId ? '✅ Údaje upravené' : '✅ Zákazník uložený') + (np?'  ·  fotiek: '+np:''));
 }
-async function delCust(){
-  if(!confirm('Naozaj vymazať?'))return;
+function delCust(){ return once(_delCust); }
+async function _delCust(){
+  const dc=custs.find(x=>x.id===editId); if(!dc) return;
+  if(!confirm('Naozaj vymazať zákazníka '+dc.name+'?\n\n'
+    + 'Vymaže sa aj jeho história ('+(dc.history||[]).length+'), protokoly ('+(dc.protocols||[]).length+') a fotky ('+(dc.photos||[]).length+').\n'
+    + 'Táto akcia sa nedá vrátiť.'))return;
   const prevAll=custs;
   custs=custs.filter(x=>x.id!==editId);
   if(!(await save({allowLess:true, allowEmpty:true}))){ if(!lastSaveReloaded) custs=prevAll; renderCusts(); renderDash(); return; }
@@ -2252,18 +2350,24 @@ function closeDM(){document.getElementById('detailModal').classList.remove('open
 function editFromDetail(){openEdit(detailId);}
 function markServiced(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
-  const run=async ids=>{
+  const run=ids=>once(async()=>{
     const today=todayISO();
     const nx=addMonthsISO(today, settings.interval||12);
-    ids.forEach(id=>setDevDates(c,id,today,nx));
+    const pd=ids.map(id=>setDevDates(c,id,today,nx)).filter(Boolean);
     c.history=c.history||[];
-    c.history.unshift({id:uid(),date:today,type:'Ročná prehliadka',desc:ids.length>1?'Servis vykonaný (všetky zariadenia).':'Servis vykonaný.',
-      labor:0,parts:0,tech:settings.name||'',devId:ids.length>1?'ALL':ids[0]});
+    const ent={id:uid(),date:today,type:'Ročná prehliadka',desc:ids.length>1?'Servis vykonaný (všetky zariadenia).':'Servis vykonaný.',
+      labor:0,parts:0,tech:settings.name||'',devId:ids.length>1?'ALL':ids[0]};
+    if(pd.length) ent.pd=pd;      // pôvodné termíny — vymazaním záznamu sa vrátia
+    c.history.unshift(ent);
     if(!(await saveOrRevert())) return;
     closeDM(); renderCusts(); renderDash();
-    showToast('✅ Servis zaznamenaný · ďalší: '+fmt(nx));
-  };
-  if(!hasMulti(c)) return run(['main']);
+    showToast(pd.length ? '✅ Servis zaznamenaný · ďalší: '+fmt(nx) : '✅ Servis zaznamenaný · termíny ostali (novšia prehliadka už je zapísaná)');
+  });
+  if(!hasMulti(c)){
+    if(!confirm('Označiť servis u zákazníka '+c.name+' ako vykonaný dnes?\n\nĎalšia prehliadka sa nastaví na '
+      + fmt(addMonthsISO(todayISO(), settings.interval||12))+'.')) return;
+    return run(['main']);
+  }
   pickDevice(c,'Ktoré zariadenie bolo servisované?',id=>run(id==='ALL'?devList(c).map(d=>d.id):[id]),true);
 }
 
@@ -2341,7 +2445,7 @@ function renderHistList(){
   const h=(c&&c.history)||[];
   const el=document.getElementById('histList');
   if(!h.length){el.innerHTML='<div class="empty"><div class="empty-ic">📋</div>Žiadna história</div>';return;}
-  el.innerHTML=[...h].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`
+  el.innerHTML=[...h].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))).map(e=>`
     <div class="hist-item">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
         <div class="hist-date">${fmt(e.date)} · ${esc(e.type)}${hasMulti(c)?' · '+esc(devShort(c,e.devId)):''}</div>
@@ -2369,39 +2473,46 @@ function openAddHistory(){
   document.getElementById('histModal').classList.add('open');
 }
 function closeHM(){editHistId=null;document.getElementById('histModalTitle').textContent='Servisný záznam';document.getElementById('histModal').classList.remove('open');}
-async function saveHistory(){
+function saveHistory(){ return once(_saveHistory); }
+async function _saveHistory(){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
   c.history=c.history||[];
   const type=document.getElementById('hType').value;
   const date=document.getElementById('hDate').value;
-
+  if(!isISO(date)){ alert('Zadaj dátum zásahu.'); return; }
+  const devId=histDevVal();
+  const ent={id:editHistId||uid(),date,type,
+    desc:document.getElementById('hDesc').value,
+    labor:parseFloat(document.getElementById('hLabor').value)||0,
+    parts:parseFloat(document.getElementById('hParts').value)||0,
+    tech:document.getElementById('hTech').value, devId};
+  let force=false;
   if(editHistId){
     // Edit existing entry
     const idx=c.history.findIndex(x=>x.id===editHistId);
     if(idx>-1){
-      c.history[idx]={id:editHistId,date,type,
-        desc:document.getElementById('hDesc').value,
-        labor:parseFloat(document.getElementById('hLabor').value)||0,
-        parts:parseFloat(document.getElementById('hParts').value)||0,
-        tech:document.getElementById('hTech').value, devId:histDevVal()};
-    }
-    editHistId=null;
+      const old=c.history[idx];
+      if(old.pd) ent.pd=old.pd;
+      // oprava dátumu v zázname, ktorý je posledným servisom zariadenia, smie termín posunúť aj späť
+      const cur=(getDev(c,devId)||{}).lastService||'';
+      force = (old.devId||'main')===devId && isISO(old.date) && old.date===cur;
+      c.history[idx]=ent;
+    } else c.history.unshift(ent);
   } else {
     // New entry
-    c.history.unshift({id:uid(),date,type,
-      desc:document.getElementById('hDesc').value,
-      labor:parseFloat(document.getElementById('hLabor').value)||0,
-      parts:parseFloat(document.getElementById('hParts').value)||0,
-      tech:document.getElementById('hTech').value, devId:histDevVal()});
+    c.history.unshift(ent);
   }
 
   // Posunúť dátum ďalšej prehliadky LEN pri ročnej prehliadke alebo uvedení do prevádzky
   const typesWithCountdown = ['Ročná prehliadka','Uvedenie do prevádzky'];
-  if(typesWithCountdown.includes(type) && date){
-    setDevDates(c, histDevVal(), date, addMonthsISO(date, settings.interval||12));
+  if(typesWithCountdown.includes(type)){
+    const pd=setDevDates(c, devId, date, addMonthsISO(date, settings.interval||12), force);
+    if(pd && !ent.pd) ent.pd=[pd];
   }
 
-  const okH=await saveOrRevert(); closeHM(); renderHistList(); if(!okH) return; renderCusts(); renderDash();
+  // pri neúspechu ostáva okno otvorené s vyplnenými údajmi
+  if(!(await saveOrRevert())){ renderHistList(); return; }
+  closeHM(); renderHistList(); renderCusts(); renderDash();
 }
 
 let editHistId = null;
@@ -2421,11 +2532,23 @@ function editHistEntry(hid){
   document.getElementById('histModal').classList.add('open');
 }
 
-async function delHistEntry(hid){
-  if(!confirm('Vymazať tento servisný záznam?'))return;
+function delHistEntry(hid){ return once(()=>_delHistEntry(hid)); }
+async function _delHistEntry(hid){
   const c=custs.find(x=>x.id===detailId); if(!c)return;
+  const e=(c.history||[]).find(x=>x.id===hid); if(!e)return;
+  if(!confirm('Vymazať tento servisný záznam?'))return;
+  const back=undoDevDates(c,e);
   c.history=c.history.filter(x=>x.id!==hid);
-  await saveOrRevert(); renderHistList(); renderCusts(); renderDash();
+  const ok=await saveOrRevert(); renderHistList(); renderCusts(); renderDash();
+  if(ok && back){ openDetailRefresh(); showToast('🗑️ Záznam vymazaný · termín prehliadky vrátený späť','var(--warn)'); }
+}
+// prekreslí kartu Info otvoreného zákazníka bez prepnutia záložky
+function openDetailRefresh(){
+  const m=document.querySelector('#detailModal .modal'); if(!m||!detailId) return;
+  const act=[...m.querySelectorAll('.mtab')].findIndex(x=>x.classList.contains('active'));
+  const inv=invItems;
+  openDetail(detailId); invItems=inv;
+  if(act>0){ const b=m.querySelectorAll('.mtab')[act]; if(b) b.click(); }
 }
 
 // ═══════════════════════════════════════════════
@@ -2505,8 +2628,13 @@ function uploadStamp(e){
   const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f) return;
   const r=new FileReader();
   r.onload=async ev=>{
-    try{ settings.stamp=await processStampImage(ev.target.result); saveSett(); renderStampPrev(); showToast('✅ Pečiatka uložená'); }
-    catch(err){ alert('❌ '+err.message); }
+    const old=settings.stamp;
+    try{
+      settings.stamp=await processStampImage(ev.target.result);
+      if(!saveSett()){ settings.stamp=old; renderStampPrev(); return; }
+      renderStampPrev(); showToast('✅ Pečiatka uložená');
+    }
+    catch(err){ settings.stamp=old; alert('❌ '+err.message); }
   };
   r.readAsDataURL(f);
 }
@@ -2549,7 +2677,7 @@ function saveSettings(){
   ['Email:email','Ico:ico','Dic:dic','Icdph:icdph','Web:web','Opr:opravnenie','Analyzer:analyzer','AnalyzerCal:analyzerCal'].forEach(pair=>{
     const [id,key]=pair.split(':'); const el=document.getElementById('s'+id); if(el)settings[key]=el.value;
   });
-  saveSett();
+  if(!saveSett()) return;
   if(settings.name) document.getElementById('techLabel').textContent=settings.name;
   renderLicUI();
   showToast('✅ Uložené');
@@ -2568,7 +2696,8 @@ function uploadLogo(e){
     const old=settings.logo;
     try{
       settings.logo=await shrinkLogo(ev.target.result);
-      saveSett(); renderLogoPrev(); showToast('✅ Logo uložené');
+      if(!saveSett()) throw new Error('plná pamäť');
+      renderLogoPrev(); showToast('✅ Logo uložené');
     }catch(err){
       settings.logo=old; renderLogoPrev();
       alert('❌ Logo sa nepodarilo uložiť — obrázok je príliš veľký alebo poškodený.');
@@ -2667,7 +2796,7 @@ function navTo(lat,lng,force){
   } else {
     url = 'https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng+'&travelmode=driving';
   }
-  window.open(url,'_blank');
+  window.open(url,'_blank','noopener');
 }
 function navToCust(id){
   const c=custs.find(x=>x.id===id); if(!c)return;
@@ -2680,14 +2809,14 @@ function navToCust(id){
     : (app==='apple' || (app==='auto' && isIOS()))
     ? 'https://maps.apple.com/?daddr='+q+'&dirflg=d'
     : 'https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving';
-  window.open(url,'_blank');
+  window.open(url,'_blank','noopener');
   showToast('Navigujem podľa adresy · GPS doplníš v karte zákazníka','var(--warn)');
 }
 function previewOnMap(){
   const lat=parseFloat(document.getElementById('fLat').value);
   const lng=parseFloat(document.getElementById('fLng').value);
   if(!lat||!lng){ alert('Najprv nájdi alebo zadaj GPS súradnice.'); return; }
-  window.open('https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lng+'#map=17/'+lat+'/'+lng,'_blank');
+  window.open('https://www.openstreetmap.org/?mlat='+lat+'&mlon='+lng+'#map=17/'+lat+'/'+lng,'_blank','noopener');
 }
 
 function getMyLocation(){
@@ -2773,7 +2902,12 @@ async function applyBackup(d, label){
     + 'Pôvodný stav sa odloží — dá sa vrátiť v Nastaveniach.')) return false;
   const prev=custs;
   if(DB && storageReady && !storageFailed && prev.length){
-    try{ await idbSet('custs_prev',{ts:Date.now(),custs:prev}); }catch(e){ console.warn('custs_prev',e); }
+    try{ await idbTry(()=>idbSet('custs_prev',{ts:Date.now(),custs:prev})); }
+    catch(e){
+      console.warn('custs_prev',e);
+      if(!confirm('Pôvodný stav sa nepodarilo odložiť (v telefóne je málo miesta).\n\n'
+        + 'Pokračovať v obnove BEZ možnosti vrátiť sa k súčasným dátam?')) return false;
+    }
   }
   custs=list;
   if(!(await save({allowLess:true, allowEmpty:true, force:true}))){ custs=prev; renderCusts(); renderDash(); return false; }
@@ -2789,6 +2923,19 @@ async function updateUndoUI(){
     b.style.display='block';
     b.textContent='↩️ Vrátiť dáta spred poslednej obnovy ('+p.custs.length+' zákazníkov, '+new Date(p.ts).toLocaleDateString('sk-SK')+')';
   } else b.style.display='none';
+  // záchranná kópia (bez fotiek) sa ponúka len vtedy, keď sa úložisko stratilo
+  const lb=document.getElementById('lightRestoreBtn');
+  if(lb){
+    let n=0;
+    if(storageWiped){ try{ const a=JSON.parse(localStorage.getItem('sk2_custs_light')||'[]'); n=Array.isArray(a)?a.length:0; }catch(e){} }
+    lb.style.display=n?'block':'none';
+    if(n) lb.textContent='🛟 Obnoviť zo záchrannej kópie ('+n+' zákazníkov, bez fotiek)';
+  }
+}
+async function restoreFromLight(){
+  let a=null; try{ a=JSON.parse(localStorage.getItem('sk2_custs_light')||'null'); }catch(e){}
+  if(!Array.isArray(a)||!a.length){ alert('Záchranná kópia sa nenašla.'); return; }
+  if(await applyBackup({custs:a},'záchranná kópia bez fotiek')){ loadSett(); showToast('✅ Obnovené zo záchrannej kópie'); }
 }
 async function restorePrevData(){
   let p=null; try{ p=await idbGet('custs_prev'); }catch(e){}
@@ -2846,10 +2993,17 @@ function importJSON(e){
 }
 async function clearAll(){
   if(!confirm('Vymazať VŠETKY dáta?\nTáto akcia sa nedá vrátiť.'))return;
+  const prevAll=custs;
   custs=[];
+  if(!(await save(true))){
+    if(!lastSaveReloaded) custs=prevAll;
+    renderCusts(); renderDash();
+    showToast('⚠️ Dáta sa nepodarilo vymazať','var(--danger)');
+    return;
+  }
   try{ localStorage.removeItem('sk2_custs'); localStorage.removeItem('sk2_custs_light'); }catch(e){}
-  await save(true);
-  renderCusts(); renderDash(); updateStorageUI();
+  storageWiped=false;
+  renderCusts(); renderDash(); updateStorageUI(); updateUndoUI();
   showToast('Všetky dáta vymazané','var(--warn)');
 }
 
@@ -3066,7 +3220,7 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowLeft') pvPrev();
 });
 
-['custModal','detailModal','histModal','driveHelpModal','devPickModal','licModal','mailModal'].forEach(id=>{
+['detailModal','driveHelpModal','devPickModal','licModal','mailModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
