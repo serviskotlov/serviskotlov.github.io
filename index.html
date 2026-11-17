@@ -355,6 +355,7 @@ input[type="file"]{display:none;}
 
 <!-- PAGE: DASHBOARD -->
 <div class="pg active" id="page-dashboard">
+  <div id="newsBanner"></div>
   <div id="backupBanner"></div>
   <div id="licBanner"></div>
   <div class="sgrid">
@@ -507,6 +508,11 @@ input[type="file"]{display:none;}
   <button class="btn btn-s" id="undoRestoreBtn" style="margin-top:6px;display:none" onclick="restorePrevData()">↩️ Vrátiť dáta spred poslednej obnovy</button>
   <button class="btn btn-o" id="lightRestoreBtn" style="margin-top:6px;display:none" onclick="restoreFromLight()">🛟 Obnoviť zo záchrannej kópie (bez fotiek)</button>
   <button class="btn btn-d" style="margin-top:12px" onclick="clearAll()">🗑️ Vymazať všetky dáta</button>
+
+  <div class="stitle">ℹ️ O aplikácii</div>
+  <div id="aboutBox" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8"></div>
+  <button class="btn btn-s" style="margin-top:8px" onclick="openAbout()">✨ Čo je nové</button>
+  <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
 </div>
 
 <!-- MODAL: DRIVE HELP -->
@@ -845,6 +851,15 @@ input[type="file"]{display:none;}
 <div id="pdfBusy"><div style="font-size:30px">📄</div><div>Pripravujem PDF…</div></div>
 
 <!-- MODAL: LIMIT / LICENCIA -->
+<div class="ov-bg" id="aboutModal">
+<div class="modal">
+  <div class="mdrag"></div>
+  <div class="mtitle"><span>✨ Čo je nové</span><button class="mclose" onclick="document.getElementById('aboutModal').classList.remove('open')">✕</button></div>
+  <div id="aboutBody" style="font-size:13px;line-height:1.6;color:var(--text)"></div>
+  <button class="btn btn-p" style="margin-top:14px" onclick="document.getElementById('aboutModal').classList.remove('open')">Zavrieť</button>
+</div>
+</div>
+
 <div class="ov-bg" id="licModal">
 <div class="modal">
   <div class="mdrag"></div>
@@ -905,6 +920,26 @@ const DEFAULT_LOGO = '';
 // Dáta sa načítajú VÝHRADNE v bootStorage(). Nikdy nezačíname zo záchrannej
 // kópie — tá je bez fotiek a jej uloženie by fotky zmazalo.
 let custs = [];
+// ═══════════════════════════════════════════════
+// VERZIA APLIKÁCIE A ZOZNAM ZMIEN
+// Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
+// a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
+// ═══════════════════════════════════════════════
+const APP_VERSION = '2026.11.17';
+const CHANGELOG = [
+  { v:'2026.11.17', items:[
+    'Aplikácia sa otvorí aj bez internetu a dá sa pridať na plochu telefónu s vlastnou ikonou',
+    'PRO: podpis zákazníka prstom priamo na displeji, vytlačí sa na protokole',
+    'PRO: servisný protokol pre elektrický kotol',
+    'Fotky sú uložené zvlášť — ukladanie je mnohonásobne rýchlejšie a šetrí pamäť telefónu',
+    'Tlačidlo Späť zatvára okná; rozpísaný formulár sa pred zavretím opýta',
+    'Hľadanie funguje aj bez diakritiky (kovac nájde Kováč)',
+    '„Označiť ako servisované“ sa najprv opýta; vymazaním záznamu sa termín prehliadky vráti',
+    'Spoľahlivejšie ukladanie, ochrana proti dvojitému uloženiu a overovanie pravosti PRO modulu',
+    'Číslo verzie a tento zoznam zmien v Nastaveniach',
+  ]},
+];
+
 let persistGranted = false;
 let storageReady = false;      // true až keď sú načítané kompletné dáta
 let bootPromise = null;
@@ -1405,6 +1440,65 @@ async function updateStorageUI(){
       </div>`;
   }
 }
+// ── O aplikácii: verzia, novinky, údaje pre podporu ─────────────────
+function proModuleLabel(){
+  let v=null; try{ v=SKLicense.proVersion && SKLicense.proVersion(); }catch(e){}
+  return v || (SKLicense.isPro() ? 'ešte sa nestiahol' : '—');
+}
+function isInstalled(){
+  try{ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }catch(e){ return false; }
+}
+function renderAbout(){
+  const el=document.getElementById('aboutBox'); if(!el) return;
+  el.innerHTML='Verzia aplikácie: <b style="color:var(--text)">'+esc(APP_VERSION)+'</b><br>'
+    + 'PRO modul: '+esc(proModuleLabel())+'<br>'
+    + (isInstalled() ? 'Nainštalovaná na ploche' : 'Otvorená v prehliadači');
+}
+function openAbout(){
+  document.getElementById('aboutBody').innerHTML=CHANGELOG.map((r,i)=>
+    '<div style="font-family:var(--mono);font-size:12px;color:'+(i?'var(--muted)':'var(--accent)')+';margin:'+(i?'16px':'0')+' 0 6px">Verzia '+esc(r.v)+(r.v===APP_VERSION?' · táto verzia':'')+'</div>'
+    + '<ul style="margin:0;padding-left:18px">'+r.items.map(t=>'<li style="margin:4px 0">'+esc(t)+'</li>').join('')+'</ul>').join('');
+  document.getElementById('aboutModal').classList.add('open');
+  try{ localStorage.setItem('sk2_newsSeen', APP_VERSION); }catch(e){}
+  renderNewsBanner();
+}
+// Na Prehľade upozorní na novú verziu, kým si používateľ novinky neotvorí. Pri úplne prvom spustení sa neukazuje.
+function renderNewsBanner(){
+  const el=document.getElementById('newsBanner'); if(!el) return;
+  let seen=null; try{ seen=localStorage.getItem('sk2_newsSeen'); }catch(e){}
+  if(seen===APP_VERSION){ el.innerHTML=''; return; }
+  if(!seen && !localStorage.getItem('sk2_idb')){              // nový používateľ — nie je čo oznamovať
+    try{ localStorage.setItem('sk2_newsSeen', APP_VERSION); }catch(e){}
+    el.innerHTML=''; return;
+  }
+  el.innerHTML='<div class="ai" onclick="openAbout()"><div class="ai-ic">✨</div><div class="ai-tx">'
+    + '<div class="ai-nm">Aplikácia bola aktualizovaná</div>'
+    + '<div class="ai-ds">Verzia '+esc(APP_VERSION)+' — ťukni a pozri, čo je nové</div></div><div style="color:var(--muted);font-size:16px">›</div></div>';
+}
+function supportInfo(){
+  const nProto=custs.reduce((n,c)=>n+((c.protocols||[]).length),0);
+  let lic='bezplatná verzia';
+  try{ if(LIC.valid) lic='…'+String(LIC.key||'').slice(-5)+(LIC.exp?' (platí do '+fmtTs(LIC.exp)+')':' (bez obmedzenia)'); }catch(e){}
+  return [
+    'ServisKotlov PRO — údaje pre podporu',
+    'Verzia aplikácie: '+APP_VERSION,
+    'PRO modul: '+proModuleLabel(),
+    'Licencia: '+lic,
+    'Zákazníkov: '+custs.length+' · fotiek: '+countPhotos(custs)+' · protokolov: '+nProto,
+    'Úložisko: '+storageInfo()+(persistGranted?' · chránené':'')+(storageFailed?' · NEOTVORENÉ':'')+(storageWiped?' · STRATENÉ':''),
+    'Bez internetu: '+((('serviceWorker' in navigator) && navigator.serviceWorker.controller)?'pripravené':'nie'),
+    'Spustenie: '+(isInstalled()?'z plochy':'v prehliadači'),
+    'Zariadenie: '+navigator.userAgent,
+    'Čas: '+new Date().toLocaleString('sk-SK'),
+  ].join('\n');
+}
+async function copySupportInfo(){
+  await refreshStorageStats();
+  const txt=supportInfo();
+  try{ await navigator.clipboard.writeText(txt); showToast('📋 Skopírované — vlož do správy alebo e-mailu'); }
+  catch(e){ prompt('Skopíruj tento text a pošli ho podpore:', txt); }
+}
+
 // Uloží nastavenia; vráti false, ak sa to nepodarilo (plná pamäť prehliadača).
 function saveSett(){
   const data=JSON.stringify(settings);
@@ -1670,6 +1764,7 @@ const SKLicense = (() => {
   api.isPro = () => !!payload && payload.until > nowT();
 
   api.proReady = () => api.isPro() && !!globalThis.SKPro;
+  api.proVersion = () => proVersion;
 
   api.canAddCustomer = (currentCount) => api.isPro() || currentCount < FREE_LIMIT;
 
@@ -1752,6 +1847,7 @@ async function checkLicense(){
 }
 // PRO modul sa práve spustil — prekresli časti, ktoré doteraz ukazovali zámok
 function afterProLoaded(){
+  try{ renderAbout(); }catch(e){}
   // Starší PRO modul by do zálohy zapísal len odkazy na fotky namiesto obrázkov.
   // Kým sa nestiahne nový, zálohy cez modul sú pozastavené (Export JSON funguje vždy).
   if(!(window.SKPro && window.SKPro.photos>=2)){
@@ -2039,6 +2135,7 @@ async function bootStorage(){
     }catch(e){}
   }
   storageReady = true;
+  renderNewsBanner();
   if(DB && !storageWiped && !storageFailed){
     if(hasInlinePhotos(custs)) setTimeout(migratePhotos, 1500);
     setTimeout(photoGC, 30000);
@@ -2870,6 +2967,7 @@ function clearStamp(){ settings.stamp=''; saveSett(); renderStampPrev(); showToa
 // SETTINGS
 // ═══════════════════════════════════════════════
 function loadSett(){
+  renderAbout();
   document.getElementById('sName').value=settings.name||'';
   document.getElementById('sPhone').value=settings.phone||'';
   document.getElementById('sFirma').value=settings.firma||'';
@@ -3484,7 +3582,7 @@ document.addEventListener('keydown', e=>{
 // ═══════════════════════════════════════════════
 (function(){
   const $=id=>document.getElementById(id);
-  const ORDER=['driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
+  const ORDER=['aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
   const FORMS=['custModal','histModal','protoModal'];
   const CLOSE={
     devPickModal:()=>closeDevPick(), histModal:()=>closeHM(), protoModal:()=>closePM(), custModal:()=>closeCM(), detailModal:()=>closeDM(),
@@ -3563,7 +3661,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   });
 }
 
-['detailModal','driveHelpModal','devPickModal','licModal','mailModal'].forEach(id=>{
+['detailModal','driveHelpModal','devPickModal','licModal','mailModal','aboutModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 
