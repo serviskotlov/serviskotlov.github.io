@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d1b2a">
 <title>ServisKotlov PRO</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ServisKotlov">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <!-- ZXing barcode scanner -->
 <script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
@@ -1028,7 +1033,12 @@ function idbSet(key,val){
 // Malá kópia bez fotiek – poistka, keby IndexedDB zlyhala
 function mirrorToLocalStorage(){
   try{
-    const light = JSON.stringify(custs.map(c=>{const o={...c}; delete o.photos; return o;}));
+    // bez fotiek a bez obrázkov podpisov (tie sú len v hlavnom úložisku a v zálohách)
+    const light = JSON.stringify(custs.map(c=>{
+      const o={...c}; delete o.photos;
+      if(Array.isArray(o.protocols)) o.protocols=o.protocols.map(p=>{ if(!p||!p.sigCust) return p; const q={...p}; delete q.sigCust; return q; });
+      return o;
+    }));
     // nastavenia sú v tom istom sklade (~5 MB) — kópia im nesmie zabrať miesto
     if(light.length>1500000){ localStorage.removeItem('sk2_custs_light'); return; }
     localStorage.setItem('sk2_custs_light', light);
@@ -1217,7 +1227,16 @@ async function updateStorageUI(){
   const pct = st.quota ? Math.min(100, st.usage/st.quota*100) : 0;
   const col = pct>90 ? 'var(--danger)' : (pct>70 ? 'var(--warn)' : 'var(--accent3)');
   const si=document.getElementById('photoStorageInfo');
-  if(si){ si.textContent='💾 Využité: '+storageInfo(); si.style.color=col; }
+  if(si){
+    si.textContent='💾 Využité: '+storageInfo(); si.style.color=col;
+    // stav práce bez internetu
+    let oi=document.getElementById('offlineInfo');
+    if(!oi){ oi=document.createElement('div'); oi.id='offlineInfo'; oi.style.cssText='font-family:var(--mono);font-size:11px;margin-top:4px;color:var(--muted)'; si.parentNode.insertBefore(oi,si.nextSibling); }
+    const sw=('serviceWorker' in navigator);
+    oi.textContent = !sw ? '' : (navigator.serviceWorker.controller
+      ? '📴 Aplikácia je pripravená na prácu bez internetu'
+      : '📶 Práca bez internetu sa zapne pri ďalšom otvorení aplikácie');
+  }
   const box=document.getElementById('storageBox');
   if(box){
     box.innerHTML=`
@@ -3248,6 +3267,13 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowRight') pvNext();
   if(e.key==='ArrowLeft') pvPrev();
 });
+
+// Service worker: aplikácia sa otvorí aj bez signálu (súbor sw.js musí byť v tom istom priečinku)
+if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.warn('service worker', e));
+  });
+}
 
 ['detailModal','driveHelpModal','devPickModal','licModal','mailModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
