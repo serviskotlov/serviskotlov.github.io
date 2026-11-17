@@ -1030,6 +1030,142 @@ function idbSet(key,val){
   });
 }
 
+// ═══════════════════════════════════════════════
+// FOTKY — samostatné úložisko (databáza sk2photos)
+// V zázname zákazníka je len odkaz „idb:<id>~<podpis>“, obrázok je uložený zvlášť a číta sa,
+// až keď ho treba ukázať. Uloženie zákazníka tak už neprepisuje všetky fotky.
+// Fotka, ktorú sa do samostatného úložiska nepodarí zapísať, ostáva v zázname ako doteraz.
+// ═══════════════════════════════════════════════
+const PH_REF_RE=/^idb:[a-z0-9]{6,12}-[a-z0-9]{4,12}~\d{1,9}:[A-Za-z0-9+\/=]{0,40}$/;
+const PH_BLANK='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+const PH_MISSING='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#203550"/><text x="60" y="58" font-size="34" text-anchor="middle" fill="#5a7a9a">?</text><text x="60" y="84" font-size="11" font-family="sans-serif" text-anchor="middle" fill="#5a7a9a">fotka chyba</text></svg>');
+function isRef(s){ return typeof s==='string' && s.charCodeAt(0)===105 && PH_REF_RE.test(s); }
+function phId(ref){ return ref.slice(4, ref.indexOf('~')); }
+function phNewId(){ return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,9).padEnd(4,'0'); }
+function phAge(id){ const t=parseInt(String(id).split('-')[0],36); return isFinite(t) ? Date.now()-t : 0; }
+function refsOf(arr){ const s=new Set(); (Array.isArray(arr)?arr:[]).forEach(c=>((c&&c.photos)||[]).forEach(p=>{ if(isRef(p)) s.add(phId(p)); })); return s; }
+function hasInlinePhotos(arr){ return (arr||[]).some(c=>((c&&c.photos)||[]).some(p=>typeof p==='string' && !isRef(p))); }
+
+let PDB=null, pdbReady=null;
+function openPDB(){
+  if(pdbReady) return pdbReady;
+  pdbReady = new Promise(res=>{
+    if(!('indexedDB' in window)){ res(null); return; }
+    let req;
+    try{ req = indexedDB.open('sk2photos', 1); }catch(e){ res(null); return; }
+    req.onupgradeneeded = e=>{ const d=e.target.result; if(!d.objectStoreNames.contains('p')) d.createObjectStore('p'); };
+    req.onsuccess = e=>{
+      PDB=e.target.result;
+      PDB.onclose = ()=>{ PDB=null; pdbReady=null; };
+      PDB.onversionchange = ()=>{ try{ PDB.close(); }catch(_){} PDB=null; pdbReady=null; };
+      res(PDB);
+    };
+    req.onerror   = ()=>{ pdbReady=null; res(null); };
+    req.onblocked = ()=>{ pdbReady=null; res(null); };
+    setTimeout(()=>res(PDB), 15000);
+  });
+  return pdbReady;
+}
+// jedna transakcia nad úložiskom fotiek; pri stratenom spojení ho raz otvorí znova
+async function phRun(mode, fn){
+  const run=()=>new Promise((res,rej)=>{
+    if(!PDB) return rej(new Error('Úložisko fotiek nie je k dispozícii'));
+    try{
+      const tx=PDB.transaction('p',mode);
+      const out=fn(tx.objectStore('p'));
+      tx.oncomplete=()=>res(out);
+      tx.onerror=()=>rej(tx.error);
+      tx.onabort=()=>rej(tx.error||new Error('abort'));
+    }catch(e){ rej(e); }
+  });
+  await openPDB();
+  try{ return await run(); }
+  catch(e){
+    if(isQuotaErr(e)) throw e;
+    try{ if(PDB) PDB.close(); }catch(_){}
+    PDB=null; pdbReady=null; await openPDB();
+    if(!PDB) throw e;
+    return await run();
+  }
+}
+const phCache=new Map();                        // posledné zobrazené fotky (id -> obrázok)
+function phRemember(id,d){ phCache.delete(id); phCache.set(id,d); if(phCache.size>24) phCache.delete(phCache.keys().next().value); }
+async function phGet(id){
+  if(phCache.has(id)) return phCache.get(id);
+  let d=null;
+  try{ const r=await phRun('readonly', s=>s.get(id)); d=(r && typeof r.result==='string') ? r.result : null; }
+  catch(e){ console.warn('fotka', id, e); }
+  if(d) phRemember(id,d);
+  return d;
+}
+async function phKeys(){
+  try{ const r=await phRun('readonly', s=>s.getAllKeys()); return r.result||[]; }catch(e){ return []; }
+}
+function phPutMany(items){ return phRun('readwrite', s=>{ items.forEach(x=>s.put(x.d,x.id)); }); }
+function phDelete(ids){ ids.forEach(id=>phCache.delete(id)); return phRun('readwrite', s=>{ ids.forEach(id=>s.delete(id)); }); }
+
+// Obrázok fotky: pre odkaz ho načíta z úložiska (null, ak sa stratil), inak vráti to, čo dostal.
+async function photoData(src){
+  if(isRef(src)) return await phGet(phId(src));
+  return (typeof src==='string' && src) ? src : null;
+}
+// <img> pre fotku; obrázky odkazov doplní hydratePhotos()
+function phImg(src, attrs){
+  return isRef(src) ? `<img data-ph="${esc(src)}" src="${PH_BLANK}" ${attrs||''}>` : `<img src="${esc(src)}" ${attrs||''}>`;
+}
+function hydratePhotos(root){
+  (root||document).querySelectorAll('img[data-ph]').forEach(async img=>{
+    const ref=img.getAttribute('data-ph');
+    const d=await photoData(ref);
+    if(img.getAttribute('data-ph')===ref) img.src=d||PH_MISSING;
+  });
+}
+// Fotky, ktoré sú ešte priamo v záznamoch, zapíše do úložiska fotiek. Vráti mapu obrázok -> odkaz.
+async function externalizeNew(){
+  const map=new Map(), pend=[];
+  custs.forEach(c=>((c&&c.photos)||[]).forEach(p=>{
+    if(typeof p==='string' && !isRef(p) && IMG_RE.test(p) && !map.has(p)){ map.set(p,null); pend.push(p); }
+  }));
+  if(!pend.length) return map;
+  await openPDB();
+  if(!PDB) return new Map();
+  for(let k=0;k<pend.length;k+=6){              // po dávkach, nech jedna transakcia nie je obrovská
+    const batch=pend.slice(k,k+6).map(d=>({d, id:phNewId()}));
+    try{ await phPutMany(batch); }
+    catch(e){ console.warn('Fotky ostávajú v hlavnom zázname', e); break; }   // napr. plné úložisko
+    batch.forEach(b=>{ map.set(b.d, 'idb:'+b.id+'~'+photoSig(b.d)); phRemember(b.id,b.d); });
+  }
+  for(const [d,ref] of map) if(!ref) map.delete(d);
+  return map;
+}
+function withRefs(arr, map){
+  if(!map.size) return arr;
+  return arr.map(c=>((c&&c.photos)||[]).some(p=>map.has(p)) ? {...c, photos:c.photos.map(p=>map.get(p)||p)} : c);
+}
+// Úložisko fotiek: zmaže obrázky, na ktoré už neodkazuje žiadny zákazník ani odložený stav pred obnovou.
+// Čerstvé (do 15 minút) necháva — môže ich práve zapisovať iné okno.
+async function photoGC(){
+  try{
+    if(!DB || !storageReady || storageFailed || storageWiped) return 0;
+    await openPDB(); if(!PDB) return 0;
+    const stored=await idbGet('custs'); if(!Array.isArray(stored)) return 0;
+    let prev=null; try{ prev=await idbGet('custs_prev'); }catch(e){}
+    const live=new Set([...refsOf(stored), ...refsOf(custs), ...refsOf(prev&&prev.custs)]);
+    const dead=(await phKeys()).filter(k=>!live.has(k) && phAge(k)>15*60000);
+    if(dead.length) await phDelete(dead);
+    return dead.length;
+  }catch(e){ console.warn('photoGC', e); return 0; }
+}
+// Jednorazový presun fotiek zo starého spôsobu uloženia (beží na pozadí po štarte).
+async function migratePhotos(){
+  if(!DB || !storageReady || storageFailed || storageWiped || !hasInlinePhotos(custs)) return;
+  if(document.querySelector('.ov-bg.open')){ setTimeout(migratePhotos, 20000); return; }   // počas úpravy nerušíme
+  const n=custs.reduce((s,c)=>s+((c.photos||[]).filter(p=>typeof p==='string'&&!isRef(p)).length),0);
+  if(n>20) showToast('📦 Presúvam '+n+' fotiek do nového úložiska…','var(--accent)');
+  const ok=await save();
+  if(ok && !hasInlinePhotos(custs) && n>20) showToast('✅ Fotky presunuté — ukladanie je teraz rýchlejšie');
+}
+
 // Malá kópia bez fotiek – poistka, keby IndexedDB zlyhala
 function mirrorToLocalStorage(){
   try{
@@ -1084,6 +1220,9 @@ async function save(opts){
   }
   if(DB){
     try{
+      // 1a) Nové fotky idú najprv do úložiska fotiek. Zvyšok zápisu je potom krátky —
+      //     zákazníci sa ukladajú už len s odkazmi na ne.
+      const phMap = await externalizeNew();
       // 2) Poistka: nikdy neuložiť stav, ktorý by ubral fotky alebo zákazníkov,
       //    pokiaľ to nie je výslovne povolené (mazanie, import, obnova zálohy).
       // 1b) Iné okno / karta medzitým zapísalo novší stav — neprepíšeme ho starým.
@@ -1099,8 +1238,8 @@ async function save(opts){
           return false;
         }
       }
+      const stored = await idbTry(()=>idbGet('custs'));
       if(!opts.allowLess){
-        const stored = await idbTry(()=>idbGet('custs'));
         if(Array.isArray(stored)){
           const fotkyPred=countPhotos(stored), fotkyTeraz=countPhotos(custs);
           if(stored.length>custs.length){
@@ -1115,7 +1254,21 @@ async function save(opts){
           }
         }
       }
-      await idbTry(()=>idbSet('custs', custs));
+      const list = withRefs(custs, phMap);
+      await idbTry(()=>idbSet('custs', list));
+      // v pamäti nahradíme obrázky odkazmi (uvoľní sa tým pamäť telefónu)
+      if(phMap.size) custs.forEach(c=>{ if(c && Array.isArray(c.photos) && c.photos.some(p=>phMap.has(p))) c.photos=c.photos.map(p=>phMap.get(p)||p); });
+      // obrázky, na ktoré po tomto zápise už nič neodkazuje, hneď zmažeme (okrem odloženého stavu pred obnovou)
+      if(!opts.keepPhotos){
+        try{
+          const now=refsOf(list), gone=[...refsOf(stored)].filter(id=>!now.has(id));
+          if(gone.length){
+            let prev=null; try{ prev=await idbGet('custs_prev'); }catch(e){}
+            const keep=refsOf(prev&&prev.custs), del=gone.filter(id=>!keep.has(id));
+            if(del.length) await phDelete(del);
+          }
+        }catch(e){ console.warn('mazanie fotiek', e); }
+      }
       bumpRev();
       try{ localStorage.setItem('sk2_idb','1'); }catch(e){}
       try{ localStorage.removeItem('sk2_custs'); }catch(e){}   // starý 5 MB sklad už netreba
@@ -1599,6 +1752,16 @@ async function checkLicense(){
 }
 // PRO modul sa práve spustil — prekresli časti, ktoré doteraz ukazovali zámok
 function afterProLoaded(){
+  // Starší PRO modul by do zálohy zapísal len odkazy na fotky namiesto obrázkov.
+  // Kým sa nestiahne nový, zálohy cez modul sú pozastavené (Export JSON funguje vždy).
+  if(!(window.SKPro && window.SKPro.photos>=2)){
+    const wait=quiet=>{
+      if(!quiet) alert('PRO modul sa práve aktualizuje.\n\nZavri a znova otvor aplikáciu a zálohu spusti ešte raz. Medzitým môžeš použiť Export JSON.');
+      try{ SKLicense.refresh(); }catch(e){}
+      return Promise.resolve(false);
+    };
+    try{ driveBackup=wait; backupToFolder=wait; autoFolderBackup=()=>Promise.resolve(false); }catch(e){ console.error(e); }
+  }
   syncLic(); applyProUI(); renderLicUI();
   const mc=document.getElementById('mapContainer'); if(mc && !map) mc.innerHTML='';
   try{ handleOAuthRedirect(); }catch(e){ console.error(e); }
@@ -1876,6 +2039,10 @@ async function bootStorage(){
     }catch(e){}
   }
   storageReady = true;
+  if(DB && !storageWiped && !storageFailed){
+    if(hasInlinePhotos(custs)) setTimeout(migratePhotos, 1500);
+    setTimeout(photoGC, 30000);
+  }
   if(!storageWiped && !storageFailed) seedDemoIfEmpty();
   renderDash(); renderCusts();
   updateStorageUI();
@@ -2349,9 +2516,10 @@ function renderPhotoGrid(){
   const g=document.getElementById('photoGrid');
   g.innerHTML=currentEditPhotos.map((src,i)=>`
     <div class="photo-thumb">
-      <img src="${esc(src)}" alt="foto ${i+1}" onclick="viewEditPhoto(${i})">
+      ${phImg(src, `alt="foto ${i+1}" onclick="viewEditPhoto(${i})"`)}
       <button class="photo-del" onclick="event.stopPropagation();removePhoto(${i})">✕</button>
     </div>`).join('')+`<div class="photo-add" onclick="document.getElementById('photoInput').click()">📷</div>`;
+  hydratePhotos(g);
 }
 function removePhoto(i){currentEditPhotos.splice(i,1);renderPhotoGrid();}
 
@@ -2427,7 +2595,8 @@ function renderDetailPhotos(){
   const ph=(c&&c.photos)||[];
   const g=document.getElementById('detailPhotoGrid');
   if(!ph.length){g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="empty-ic">📸</div>Žiadne fotky</div>';return;}
-  g.innerHTML=ph.map((src,i)=>`<div class="photo-thumb" onclick="viewPhoto(${i})"><img src="${esc(src)}" alt="foto ${i+1}"></div>`).join('');
+  g.innerHTML=ph.map((src,i)=>`<div class="photo-thumb" onclick="viewPhoto(${i})">${phImg(src, `alt="foto ${i+1}"`)}</div>`).join('');
+  hydratePhotos(g);
 }
 
 // ═══════════════════════════════════════════════
@@ -2435,7 +2604,7 @@ function renderDetailPhotos(){
 // (dátové URL sa nedajú otvoriť v novej karte — prehliadače
 //  to blokujú, preto sa fotka zobrazuje priamo v aplikácii)
 // ═══════════════════════════════════════════════
-let pvList=[], pvIdx=0;
+let pvList=[], pvIdx=0, pvCur='';
 
 function viewPhoto(i){
   const c=custs.find(x=>x.id===detailId);
@@ -2456,7 +2625,12 @@ function closePhotoViewer(){
 }
 function pvShow(){
   const img=document.getElementById('pvImg');
-  img.src=pvList[pvIdx]||'';
+  const src=pvList[pvIdx]||'';
+  pvCur='';
+  if(isRef(src)){
+    img.src=PH_BLANK;
+    photoData(src).then(d=>{ if(pvList[pvIdx]===src){ pvCur=d||''; img.src=d||PH_MISSING; } });
+  } else { pvCur=src; img.src=src; }
   document.getElementById('pvCount').textContent=(pvIdx+1)+' / '+pvList.length;
   document.getElementById('pvWrap').classList.remove('zoom');
   document.getElementById('pvZoomBtn').textContent='🔍 Priblížiť';
@@ -2473,7 +2647,7 @@ function pvToggleZoom(){
   if(!on){ w.scrollTop=0; w.scrollLeft=0; }
 }
 function pvSave(){
-  const src=pvList[pvIdx]; if(!src)return;
+  const src=pvCur; if(!src){ showToast('Fotka sa ešte načítava','var(--warn)'); return; }
   try{
     const a=document.createElement('a');
     a.href=src;
@@ -2902,7 +3076,8 @@ function normalizeCusts(arr){
     const o={...c};
     o.id=safeId(o.id); if(seen.has(o.id)) o.id=uid(); seen.add(o.id);
     o.name=String(o.name==null?'':o.name);
-    o.photos=(Array.isArray(o.photos)?o.photos:[]).filter(s=>typeof s==='string'&&IMG_RE.test(s));
+    // odkazy na fotky v tomto zariadení ostávajú; či obrázok naozaj existuje, overí applyBackup
+    o.photos=(Array.isArray(o.photos)?o.photos:[]).filter(s=>typeof s==='string'&&(IMG_RE.test(s)||isRef(s)));
     o.history=objs(o.history).map(h=>({...h,id:safeId(h.id)}));
     o.invoice=objs(o.invoice).map(i=>({desc:String(i.desc==null?'':i.desc),qty:parseFloat(i.qty)||1,price:parseFloat(i.price)||0}));
     if(o.protocols!==undefined) o.protocols=objs(o.protocols).map(p=>({...p,id:safeId(p.id)}));
@@ -2914,11 +3089,15 @@ function normalizeCusts(arr){
 }
 // Podpis fotky: podľa neho sa pri obnove z Drive (kde sú fotky zmenšené)
 // vráti pôvodná fotka v plnej kvalite, ak ju toto zariadenie ešte má.
-function photoSig(s){ s=String(s||''); return s.length+':'+s.slice(-40); }
-function restoreLocalPhotos(list){
-  const local=new Map(); custs.forEach(c=>(c.photos||[]).forEach(p=>local.set(photoSig(p),p)));
+function photoSig(s){ s=String(s||''); if(isRef(s)) return s.slice(s.indexOf('~')+1); return s.length+':'+s.slice(-40); }
+// have = čísla obrázkov, ktoré v úložisku fotiek naozaj sú (odkaz na stratený obrázok sa nepoužije).
+// Rovnaká fotka, aká už v zariadení je, sa znova nezapisuje — použije sa tá uložená.
+function restoreLocalPhotos(list, have){
+  const local=new Map();
+  custs.forEach(c=>(c.photos||[]).forEach(p=>{ if(!isRef(p) || !have || have.has(phId(p))) local.set(photoSig(p),p); }));
   list.forEach(o=>{
     if(Array.isArray(o.photoSig)) o.photos=o.photos.map((p,i)=>local.get(o.photoSig[i])||p);
+    else o.photos=o.photos.map(p=>isRef(p)?p:(local.get(photoSig(p))||p));
     delete o.photoSig;
   });
 }
@@ -2942,7 +3121,10 @@ async function applyBackup(d, label){
     return false;
   }
   if(typeof checkImportLimit==='function'){ list=checkImportLimit(list); if(!list) return false; }
-  restoreLocalPhotos(list);
+  // odkaz na fotku má zmysel len vtedy, ak obrázok v tomto zariadení naozaj je
+  const have=new Set(await phKeys());
+  restoreLocalPhotos(list, have);
+  list.forEach(o=>{ o.photos=o.photos.filter(p=>!isRef(p)||have.has(phId(p))); });
   const when=d.ts?new Date(d.ts).toLocaleString('sk-SK'):'dátum neznámy';
   if(!confirm('Nahradiť dáta v tomto zariadení zálohou?\n\n'
     + 'TERAZ: '+custs.length+' zákazníkov, '+countPhotos(custs)+' fotiek\n'
@@ -2993,7 +3175,8 @@ async function restorePrevData(){
     + 'Súčasný stav sa odloží namiesto neho.')) return;
   const cur=custs;
   custs=p.custs;
-  if(!(await save({allowLess:true, allowEmpty:true, force:true}))){ custs=cur; return; }
+  // keepPhotos: fotky súčasného stavu sa nemažú — o chvíľu sa stanú odloženým stavom
+  if(!(await save({allowLess:true, allowEmpty:true, force:true, keepPhotos:true}))){ custs=cur; return; }
   try{ await idbSet('custs_prev',{ts:Date.now(),custs:cur}); }catch(e){}
   storageWiped=false;
   renderCusts(); renderDash(); updateUndoUI();
@@ -3018,12 +3201,37 @@ function renderBackupBanner(){
 // ═══════════════════════════════════════════════
 // JSON EXPORT / IMPORT
 // ═══════════════════════════════════════════════
-function exportJSON(){
-  const blob=new Blob([JSON.stringify({custs,settings,ts:Date.now(),version:3},null,2)],{type:'application/json'});
+// Úplná záloha ako súbor JSON s fotkami v plnej kvalite. Skladá sa po zákazníkoch,
+// aby sa v pamäti nikdy nedržali všetky fotky ako jeden obrovský text.
+async function exportBlob(){
+  const parts=[new Blob(['{"custs":['])];
+  let missing=0;
+  for(let i=0;i<custs.length;i++){
+    const c=custs[i], o={...c};
+    if(Array.isArray(c.photos) && c.photos.some(isRef)){
+      const ph=[];
+      for(const p of c.photos){ const d=await photoData(p); if(d) ph.push(d); else missing++; }
+      o.photos=ph;
+    }
+    parts.push(new Blob([(i?',':'')+JSON.stringify(o)]));
+  }
+  parts.push(new Blob(['],"settings":'+JSON.stringify(settings)+',"ts":'+Date.now()+',"version":3}']));
+  const blob=new Blob(parts,{type:'application/json'});
+  blob.missingPhotos=missing;
+  return blob;
+}
+async function exportJSON(){
+  if(countPhotos(custs)>20) showToast('⏳ Pripravujem zálohu…','var(--accent)');
+  let blob;
+  try{ blob=await exportBlob(); }
+  catch(e){ console.error(e); alert('❌ Zálohu sa nepodarilo pripraviť: '+(e&&e.message||e)); return; }
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='servis-kotlov-zaloha-'+todayISO()+'.json'; a.click();
+  a.download='servis-kotlov-zaloha-'+todayISO()+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
   try{ localStorage.setItem('sk2_exportLast', String(Date.now())); }catch(e){}
   renderBackupBanner();
+  if(blob.missingPhotos) alert('⚠️ Záloha je uložená, ale '+blob.missingPhotos+' fotiek sa v úložisku nenašlo a v zálohe chýbajú.');
 }
 function importJSON(e){
   const f=e.target.files[0]; if(!f)return;
