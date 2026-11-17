@@ -3476,6 +3476,86 @@ document.addEventListener('keydown', e=>{
   if(e.key==='ArrowLeft') pvPrev();
 });
 
+// ═══════════════════════════════════════════════
+// TLAČIDLO SPÄŤ (Android, prehliadač) A KLÁVES ESC
+// Späť zavrie to, čo je práve navrchu (podpis, skener, fotku, okno), z inej stránky vráti na Prehľad
+// a aplikáciu opustí až z Prehľadu. Rozpísaný formulár sa pred zavretím opýta.
+// Kým je niečo otvorené, drží sa v histórii prehliadača jeden záznam navyše — ten tlačidlo Späť „spotrebuje“.
+// ═══════════════════════════════════════════════
+(function(){
+  const $=id=>document.getElementById(id);
+  const ORDER=['driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
+  const FORMS=['custModal','histModal','protoModal'];
+  const CLOSE={
+    devPickModal:()=>closeDevPick(), histModal:()=>closeHM(), protoModal:()=>closePM(), custModal:()=>closeCM(), detailModal:()=>closeDM(),
+    mailModal:()=>{ if(typeof closeMailModal==='function') closeMailModal(); else $('mailModal').classList.remove('open'); },
+  };
+  const isOpen=id=>{ const m=$(id); return !!m && m.classList.contains('open'); };
+  function top(){
+    if($('sigPad')) return 'sigPad';
+    const sc=$('scannerOverlay'); if(sc && sc.style.display && sc.style.display!=='none') return 'scanner';
+    if(isOpen('photoViewer')) return 'photoViewer';
+    return ORDER.find(isOpen)||null;
+  }
+  const page=()=>{ const p=document.querySelector('.pg.active'); return p ? p.id.replace('page-','') : 'dashboard'; };
+  const busy=()=>{ const b=$('pdfBusy'); return !!b && getComputedStyle(b).display!=='none'; };
+
+  // stav formulára pri otvorení — podľa neho sa pozná, či je čo stratiť
+  const snap={}, watching={};
+  function formState(id){
+    const m=$(id); if(!m) return '';
+    let s=[...m.querySelectorAll('input,select,textarea')].map(e=>e.type==='checkbox'?e.checked:(e.type==='file'?'':e.value)).join('\u0001');
+    try{ if(id==='protoModal' && typeof protoDraft!=='undefined') s+=JSON.stringify(protoDraft); }catch(e){}
+    try{ if(id==='custModal') s+='|'+(currentEditPhotos||[]).length+'|'+JSON.stringify(typeof editDevices!=='undefined'?editDevices:[]); }catch(e){}
+    return s;
+  }
+  function closeTop(){
+    if(busy()) return;                                   // práve sa vytvára PDF
+    const t=top();
+    if(!t){ if(page()!=='dashboard') pg('dashboard'); return; }
+    if(t==='sigPad'){ const b=document.querySelector('#sigPad [data-a="x"]'); if(b) b.click(); else $('sigPad').remove(); return; }
+    if(t==='scanner') return closeScanner();
+    if(t==='photoViewer') return closePhotoViewer();
+    if(FORMS.includes(t) && snap[t]!==undefined && formState(t)!==snap[t]){
+      if(!confirm('Zavrieť bez uloženia?\n\nRozpísané údaje sa stratia.')) return;
+    }
+    (CLOSE[t]||(()=>$(t).classList.remove('open')))();
+  }
+
+  // Po obnovení stránky môže v histórii ostať náš záznam z minula. Krok späť z neho by stránku načítal znova,
+  // preto ho len zmeníme na obyčajný záznam.
+  try{ if(history.state && history.state.sk) history.replaceState(null,''); }catch(e){}
+  let armed=false, ignore=0, timer=null;
+  function reconcile(){
+    timer=null;
+    FORMS.forEach(id=>{
+      if(isOpen(id)){ if(!watching[id]){ watching[id]=1; setTimeout(()=>{ if(isOpen(id)) snap[id]=formState(id); }, 350); } }
+      else { delete watching[id]; delete snap[id]; }
+    });
+    const want=!!top() || page()!=='dashboard';
+    if(want && !armed){ try{ history.pushState({sk:1},''); armed=true; }catch(e){} }
+    else if(!want && armed){
+      // všetko sa zavrelo tlačidlami v aplikácii — záznam navyše vrátime, aby Späť z Prehľadu hneď odišlo
+      armed=false; ignore++;
+      setTimeout(()=>{ ignore=0; }, 800);
+      try{ history.back(); }catch(e){ ignore=0; }
+    }
+  }
+  const schedule=()=>{ if(!timer) timer=setTimeout(reconcile, 60); };
+  window.addEventListener('popstate', ()=>{
+    if(ignore>0){ ignore--; return; }
+    armed=false;
+    try{ closeTop(); }catch(e){ console.error(e); }
+    schedule();
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape' && top()){ try{ closeTop(); }catch(err){ console.error(err); } schedule(); }
+  });
+  new MutationObserver(schedule).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','style']});
+  new MutationObserver(schedule).observe(document.body,{childList:true});
+  schedule();
+})();
+
 // Service worker: aplikácia sa otvorí aj bez signálu (súbor sw.js musí byť v tom istom priečinku)
 if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost')){
   window.addEventListener('load', ()=>{
