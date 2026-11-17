@@ -931,6 +931,7 @@ const CHANGELOG = [
     'Aplikácia sa otvorí aj bez internetu a dá sa pridať na plochu telefónu s vlastnou ikonou',
     'PRO: podpis zákazníka prstom priamo na displeji, vytlačí sa na protokole',
     'PRO: servisný protokol pre elektrický kotol',
+    'PRO: pripomienky zákazníkom — pripravená SMS alebo e-mail na jedno ťuknutie',
     'Fotky sú uložené zvlášť — ukladanie je mnohonásobne rýchlejšie a šetrí pamäť telefónu',
     'Tlačidlo Späť zatvára okná; rozpísaný formulár sa pred zavretím opýta',
     'Hľadanie funguje aj bez diakritiky (kovac nájde Kováč)',
@@ -3582,7 +3583,7 @@ document.addEventListener('keydown', e=>{
 // ═══════════════════════════════════════════════
 (function(){
   const $=id=>document.getElementById(id);
-  const ORDER=['aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
+  const ORDER=['remindModal','aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
   const FORMS=['custModal','histModal','protoModal'];
   const CLOSE={
     devPickModal:()=>closeDevPick(), histModal:()=>closeHM(), protoModal:()=>closePM(), custModal:()=>closeCM(), detailModal:()=>closeDM(),
@@ -3593,7 +3594,10 @@ document.addEventListener('keydown', e=>{
     if($('sigPad')) return 'sigPad';
     const sc=$('scannerOverlay'); if(sc && sc.style.display && sc.style.display!=='none') return 'scanner';
     if(isOpen('photoViewer')) return 'photoViewer';
-    return ORDER.find(isOpen)||null;
+    // okná v známom poradí; okno, ktoré pridal PRO modul, sa nájde ako posledné otvorené na stránke
+    const known=ORDER.find(isOpen); if(known) return known;
+    const any=[...document.querySelectorAll('.ov-bg.open')].pop();
+    return any&&any.id ? any.id : null;
   }
   const page=()=>{ const p=document.querySelector('.pg.active'); return p ? p.id.replace('page-','') : 'dashboard'; };
   const busy=()=>{ const b=$('pdfBusy'); return !!b && getComputedStyle(b).display!=='none'; };
