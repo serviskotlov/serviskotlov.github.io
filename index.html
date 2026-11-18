@@ -925,8 +925,14 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.17';
+const APP_VERSION = '2026.11.18';
 const CHANGELOG = [
+  { v:'2026.11.18', items:[
+    'PRO: synchronizácia medzi telefónom a počítačom cez Google Drive',
+    'PRO: Google Drive ostáva pripojený natrvalo — netreba sa prihlasovať každú hodinu',
+    'PRO: Google Drive sa pripojí jedným ťuknutím, bez vlastného nastavovania v Google Cloud',
+    'Nastavenia: Google Drive, šablóny protokolov a pripomienky sú v zbaľovacích častiach',
+  ]},
   { v:'2026.11.17', items:[
     'Aplikácia sa otvorí aj bez internetu a dá sa pridať na plochu telefónu s vlastnou ikonou',
     'PRO: podpis zákazníka prstom priamo na displeji, vytlačí sa na protokole',
@@ -1767,6 +1773,14 @@ const SKLicense = (() => {
 
   api.proReady = () => api.isPro() && !!globalThis.SKPro;
   api.proVersion = () => proVersion;
+  // Volanie licenčného servera v mene tohto zariadenia (kľúč a ID zariadenia doplní samo).
+  // Len pre služby Google Drive — iné adresy sa takto volať nedajú.
+  api.serverCall = async function (path, data) {
+    if (!/^\/drive\/[a-z]+$/.test(String(path))) return { ok: false, error: 'bad_path' };
+    const key = localStorage.getItem(LS.key);
+    if (!key) return { ok: false, error: 'no_license' };
+    return call(path, Object.assign({}, data || {}, { key, deviceId: deviceId() }));
+  };
 
   api.canAddCustomer = (currentCount) => api.isPro() || currentCount < FREE_LIMIT;
 
