@@ -367,6 +367,16 @@ select option{background:var(--surf);color:var(--text);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 input[type="date"]{color-scheme:dark;}
 input[type="file"]{display:none;}
+</style>
+<style id="skFoldCss">
+details.sk-fold>summary{list-style:none;cursor:pointer;user-select:none;-webkit-user-select:none;padding:6px 0;margin:8px 0 2px}
+details.sk-fold>summary::-webkit-details-marker{display:none}
+details.sk-fold>summary .sk-arr{order:3;flex:none;font-size:14px;line-height:1;color:var(--muted);transition:transform .15s}
+details.sk-fold>summary::after{order:2}
+details.sk-fold[open]>summary .sk-arr{transform:rotate(90deg)}
+details.sk-fold>summary .sk-sum{order:1;text-transform:none;letter-spacing:0;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+details.sk-fold>summary .sk-sum.warn{color:var(--warn)}
+details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
 .wcrow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;}
 .wcdot{width:8px;height:8px;border-radius:50%;background:var(--border);}
 .wcdot.on{background:var(--accent);}
@@ -510,11 +520,13 @@ input[type="file"]{display:none;}
     <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Svetlý režim sa lepšie číta vonku na slnku. Tlačený protokol a PDF vyzerajú v oboch režimoch rovnako.</div>
   </div>
   <button class="btn btn-p" onclick="saveSettings()">💾 Uložiť nastavenia</button>
-  <div class="stitle">💾 Úložisko v telefóne</div>
+  <details class="sk-fold" id="storageFold"><summary class="stitle"><span style="order:1">💾 Úložisko v telefóne</span><span class="sk-sum" id="storageSum"></span><span class="sk-arr">▸</span></summary>
   <div id="storageBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
+  </details>
 
-  <div class="stitle">📁 Záloha do priečinka</div>
+  <details class="sk-fold" id="folderFold"><summary class="stitle"><span style="order:1">📁 Záloha do priečinka</span><span class="sk-sum" id="folderSum"></span><span class="sk-arr">▸</span></summary>
   <div id="folderBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
+  </details>
 
   <div class="stitle">☁️ Google Drive záloha</div>
 
@@ -1012,8 +1024,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18.4';
+const APP_VERSION = '2026.11.18.5';
 const CHANGELOG = [
+  { v:'2026.11.18.5', items:['PRO: rozpísaná cenová ponuka sa priebežne ukladá v telefóne — nestratí sa pri zatvorení, prepnutí zákazníka ani reštarte; na Prehľade pripomienka „dokonči“','Nastavenia: Úložisko a Záloha do priečinka sú zbalené, stav vidno pri nadpise'] },
   { v:'2026.11.18.4', items:['Svetlý režim na čítanie vonku na slnku: Nastavenia → Vzhľad (tmavý, svetlý alebo podľa telefónu).'] },
   { v:'2026.11.18.3', items:['Uvítanie pri prvom spustení: krátky sprievodca nastaví údaje firmy a ponúkne prvého zákazníka, ukážku alebo obnovu zo zálohy.'] },
   { v:'2026.11.18.2', items:[
@@ -1531,6 +1544,13 @@ async function updateStorageUI(){
       ? '📴 Aplikácia je pripravená na prácu bez internetu'
       : '📶 Práca bez internetu sa zapne pri ďalšom otvorení aplikácie');
   }
+  const sum=document.getElementById('storageSum');
+  if(sum){
+    const bad=storageReady && (!st.idb || pct>90);
+    sum.textContent=!storageReady?'':'· '+(st.idb?storageInfo().split(' z ')[0]:'núdzový režim');
+    sum.className='sk-sum'+(bad?' bad':(pct>70?' warn':''));
+    const f=document.getElementById('storageFold'); if(f && bad && !f.dataset.auto){ f.dataset.auto='1'; f.open=true; }
+  }
   const box=document.getElementById('storageBox');
   if(box){
     box.innerHTML=`
@@ -1635,7 +1655,7 @@ const SKLicense = (() => {
   // Verejný podpisový kľúč PRO modulu z keygen.html. Kým je null, modul sa spúšťa bez overenia podpisu.
   // Po vložení kľúča aplikácia spustí len modul podpísaný v admin.html zodpovedajúcim súkromným kľúčom —
   // podpísaný modul preto nahraj na server SKÔR, než túto verziu aplikácie zverejníš.
-  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };;
+  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
   const MOD_CHECK_EVERY = 30 * 60 * 1000; // kontrola novej verzie PRO modulu
@@ -2093,6 +2113,24 @@ function openProtocol(){ needPro('Servisné protokoly'); }
 function printBlankProtocol(){ needPro('Servisné protokoly'); }
 function exportExcel(){ needPro('Export do Excelu'); }
 function updateFolderUI(){ proLock('folderBox','Záloha do priečinka'); }
+// krátky stav pri nadpise zbalenej časti „Záloha do priečinka“
+function folderSummary(){
+  const el=document.getElementById('folderSum'), box=document.getElementById('folderBox'); if(!el||!box) return;
+  const t=box.textContent||'';
+  let txt='', cls='';
+  if(!SKLicense.isPro() || /súčasť verzie PRO|verzii PRO/i.test(t)) txt='PRO';
+  else if(/nevie zapisovať/.test(t)) txt='nepodporuje tento prehliadač';
+  else if(/Priečinok:/.test(t)){
+    let last=null; try{ last=parseInt(localStorage.getItem('sk2_folderLastBackup')); }catch(e){}
+    if(last){ const d=Math.floor((Date.now()-last)/864e5); txt=d<1?'zálohované dnes':(d===1?'pred 1 dňom':'pred '+d+' dňami'); if(d>14) cls='warn'; }
+    else { txt='ešte bez zálohy'; cls='warn'; }
+  } else if(/Vybrať priečinok/.test(t)) txt='nenastavené';
+  el.textContent=txt?'· '+txt:''; el.className='sk-sum'+(cls?' '+cls:'');
+}
+(function(){
+  const box=document.getElementById('folderBox'); if(!box) return;
+  new MutationObserver(()=>{ try{ folderSummary(); }catch(e){} }).observe(box,{childList:true,subtree:true,characterData:true});
+})();
 function renderDriveDiag(){}
 function loadDriveSettings(){}
 function handleOAuthRedirect(){}
