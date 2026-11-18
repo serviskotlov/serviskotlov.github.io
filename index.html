@@ -5,6 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d1b2a">
+<script>
+// Vzhľad sa nastaví ešte pred vykreslením, aby appka pri štarte nebliknula inou farbou.
+// Voľba je len pre toto zariadenie (nesynchronizuje sa): 'dark' (predvolené), 'light', 'auto' = podľa telefónu.
+(function(){
+  var pref='dark'; try{ pref=localStorage.getItem('sk2_theme')||'dark'; }catch(e){}
+  var mq=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;
+  function apply(){
+    var t=pref==='auto'?(mq&&mq.matches?'light':'dark'):(pref==='light'?'light':'dark');
+    document.documentElement.setAttribute('data-theme',t);
+    var m=document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute('content',t==='light'?'#ffffff':'#0d1b2a');
+  }
+  apply();
+  if(mq){ var on=function(){ if(pref==='auto') apply(); }; if(mq.addEventListener) mq.addEventListener('change',on); else if(mq.addListener) mq.addListener(on); }
+  window.setTheme=function(p){
+    pref=(p==='light'||p==='auto')?p:'dark';
+    try{ localStorage.setItem('sk2_theme',pref); }catch(e){}
+    apply();
+    var box=document.getElementById('themeChips');
+    if(box) [].forEach.call(box.querySelectorAll('.chip'),function(c){ c.classList.toggle('active',c.getAttribute('data-t')===pref); });
+  };
+  window.themePref=function(){ return pref; };
+})();
+</script>
 <title>ServisKotlov PRO</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -28,6 +51,20 @@
   --mono:'IBM Plex Mono',monospace; --sans:'Syne',sans-serif;
   --r:12px;
 }
+/* Svetlý režim – na čítanie na priamom slnku. Farby stavov sú tmavšie, aby mali na bielom dostatočný kontrast. */
+:root[data-theme="light"]{
+  --bg:#eef2f6; --surf:#ffffff; --surf2:#f5f8fb; --surf3:#e4ebf2;
+  --border:#cfdae5; --border2:#b4c4d4;
+  --accent:#0072a3; --accent2:#c2410c; --accent3:#047857;
+  --warn:#9a6700; --danger:#c8102e; --text:#0d1b2a; --muted:#536579;
+  color-scheme:light;
+}
+:root[data-theme="light"] .ov-bg{background:rgba(13,27,42,.45);}
+:root[data-theme="light"] .leaflet-container{background:#e9eef3!important;}
+:root[data-theme="light"] .hdr{box-shadow:0 1px 6px rgba(13,27,42,.06);}
+:root[data-theme="light"] .modal{box-shadow:0 -6px 24px rgba(13,27,42,.18);}
+:root[data-theme="light"] .btn-o{background:rgba(0,114,163,.08);}
+:root{color-scheme:dark;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;max-width:480px;margin:0 auto;overflow-x:hidden;}
 
@@ -159,7 +196,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
 /* ── MAP ── */
 #mapContainer{height:380px;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);margin-top:8px;}
-.leaflet-container{background:#0d1b2a!important;}
+.leaflet-container{background:var(--bg)!important;}
 .leaflet-popup-content-wrapper{background:var(--surf2);color:var(--text);border-radius:12px;border:1px solid var(--border2);box-shadow:0 4px 18px rgba(0,0,0,.5);}
 .leaflet-popup-tip{background:var(--surf2);}
 .leaflet-popup-content{margin:12px 14px;font-family:var(--sans);min-width:190px;}
@@ -216,7 +253,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   #printArea{display:block!important;}
   .print-page{padding:20px;}
 }
-select option{background:#132233;}
+select option{background:var(--surf);color:var(--text);}
 
 
 /* ── SERVISNÝ PROTOKOL (formulár v apke) ── */
@@ -462,6 +499,15 @@ input[type="file"]{display:none;}
       <option value="apple">Apple Maps</option>
       <option value="waze">Waze</option>
     </select>
+  </div>
+  <div class="stitle">🎨 Vzhľad</div>
+  <div class="fg"><label class="fl">Farby aplikácie · platí hneď, len v tomto zariadení</label>
+    <div id="themeChips" style="display:flex;gap:6px;flex-wrap:wrap">
+      <button type="button" class="chip" data-t="dark" onclick="setTheme('dark')">🌙 Tmavý</button>
+      <button type="button" class="chip" data-t="light" onclick="setTheme('light')">☀️ Svetlý</button>
+      <button type="button" class="chip" data-t="auto" onclick="setTheme('auto')">📱 Podľa telefónu</button>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Svetlý režim sa lepšie číta vonku na slnku. Tlačený protokol a PDF vyzerajú v oboch režimoch rovnako.</div>
   </div>
   <button class="btn btn-p" onclick="saveSettings()">💾 Uložiť nastavenia</button>
   <div class="stitle">💾 Úložisko v telefóne</div>
@@ -966,8 +1012,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18.3';
+const APP_VERSION = '2026.11.18.4';
 const CHANGELOG = [
+  { v:'2026.11.18.4', items:['Svetlý režim na čítanie vonku na slnku: Nastavenia → Vzhľad (tmavý, svetlý alebo podľa telefónu).'] },
   { v:'2026.11.18.3', items:['Uvítanie pri prvom spustení: krátky sprievodca nastaví údaje firmy a ponúkne prvého zákazníka, ukážku alebo obnovu zo zálohy.'] },
   { v:'2026.11.18.2', items:[
     'PRO: dohodnutá návšteva — do kalendára v telefóne, potvrdenie SMS, prehľad v Pláne a na Prehľade',
@@ -1588,7 +1635,7 @@ const SKLicense = (() => {
   // Verejný podpisový kľúč PRO modulu z keygen.html. Kým je null, modul sa spúšťa bez overenia podpisu.
   // Po vložení kľúča aplikácia spustí len modul podpísaný v admin.html zodpovedajúcim súkromným kľúčom —
   // podpísaný modul preto nahraj na server SKÔR, než túto verziu aplikácie zverejníš.
-  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };
+  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };;
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
   const MOD_CHECK_EVERY = 30 * 60 * 1000; // kontrola novej verzie PRO modulu
@@ -3123,6 +3170,7 @@ function loadSett(){
     const [id,key]=pair.split(':'); const el=document.getElementById('s'+id); if(el)el.value=settings[key]||'';
   });
   const navSel=document.getElementById('sNavApp'); if(navSel)navSel.value=settings.navApp||'auto';
+  try{ setTheme(themePref()); }catch(e){}
   renderLogoPrev();
   renderStampPrev();
   const vp=document.getElementById('sVatPayer'); if(vp){ vp.checked=isVatPayer(); toggleVatFields(); }
