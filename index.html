@@ -35,13 +35,25 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ServisKotlov">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<!-- ZXing barcode scanner -->
-<script defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-<!-- SheetJS for Excel export -->
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Leaflet for map -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" media="print" onload="this.media='all'"/>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// Knižnice: najprv z vlastného priečinka lib/ (nezávisí od cudzích serverov), ak tam nie sú, z CDN.
+// Čítačka kódov (ZXing), export do Excelu (SheetJS), mapa (Leaflet).
+(function(){
+  var LIBS=[
+    {css:true, local:'lib/leaflet.min.css', cdn:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'},
+    {local:'lib/zxing.min.js',  cdn:'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js'},
+    {local:'lib/xlsx.full.min.js', cdn:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'},
+    {local:'lib/leaflet.min.js', cdn:'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'}
+  ];
+  window.SKLibSrc={};
+  LIBS.forEach(function(l){
+    var el=document.createElement(l.css?'link':'script');
+    var use=function(u){ window.SKLibSrc[l.local]=u; if(l.css){ el.rel='stylesheet'; el.href=u; } else { el.async=false; el.src=u; } };
+    el.onerror=function(){ if(window.SKLibSrc[l.local]===l.cdn) return; var n=document.createElement(l.css?'link':'script'); n.onerror=null; el=n; use(l.cdn); document.head.appendChild(n); };
+    use(l.local); document.head.appendChild(el);
+  });
+})();
+</script>
 <style>
 :root {
   --bg:#0d1b2a; --surf:#132233; --surf2:#1a2e42; --surf3:#203550;
@@ -574,6 +586,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div id="aboutBox" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8"></div>
   <button class="btn btn-p" id="updBtn" style="margin-top:8px" onclick="updateApp()">🔄 Stiahnuť aktuálnu verziu</button>
   <div id="updStatus" style="display:none;font-family:var(--mono);font-size:11px;line-height:1.6;margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1px solid var(--border)"></div>
+  <a class="btn btn-s" id="guideBtn" href="navod.html" target="_blank" rel="noopener" style="margin-top:6px;display:block;text-align:center;text-decoration:none;box-sizing:border-box">📖 Návod – ako začať</a>
   <button class="btn btn-s" style="margin-top:6px" onclick="openAbout()">✨ Čo je nové</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
 </div>
@@ -1026,8 +1039,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18.8';
+const APP_VERSION = '2026.11.18.9';
 const CHANGELOG = [
+  { v:'2026.11.18.9', items:['PRO: synchronizácia posiela fotky zvlášť a len raz — menej dát, rýchlejšie, na druhom zariadení v plnej kvalite','Návod „Ako začať“ (Nastavenia → O aplikácii)','Mapa, čítačka kódov a export do Excelu sa načítajú z priečinka lib/, ak tam sú'] },
   { v:'2026.11.18.8', items:['PRO: cenová ponuka ako skutočné PDF — tlačidlo 📄 pri ponuke: v telefóne ju rovno pošleš (Gmail, WhatsApp…), na počítači sa uloží','Dlhé PDF sa delia na strany medzi riadkami, nie cez text'] },
   { v:'2026.11.18.7', items:['PRO: protokol ako skutočné PDF — ostrý text s diakritikou, dá sa vyhľadávať a kopírovať, menší súbor na e-mail; funguje aj bez signálu'] },
   { v:'2026.11.18.6', items:['Nastavenia → O aplikácii: tlačidlo „Stiahnuť aktuálnu verziu“ — hneď stiahne novú verziu aplikácie aj funkcií PRO a reštartuje'] },
@@ -1729,7 +1743,7 @@ const SKLicense = (() => {
   // Verejný podpisový kľúč PRO modulu z keygen.html. Kým je null, modul sa spúšťa bez overenia podpisu.
   // Po vložení kľúča aplikácia spustí len modul podpísaný v admin.html zodpovedajúcim súkromným kľúčom —
   // podpísaný modul preto nahraj na server SKÔR, než túto verziu aplikácie zverejníš.
-  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };;
+  const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
   const MOD_CHECK_EVERY = 30 * 60 * 1000; // kontrola novej verzie PRO modulu
