@@ -586,7 +586,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div id="aboutBox" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8"></div>
   <button class="btn btn-p" id="updBtn" style="margin-top:8px" onclick="updateApp()">🔄 Stiahnuť aktuálnu verziu</button>
   <div id="updStatus" style="display:none;font-family:var(--mono);font-size:11px;line-height:1.6;margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1px solid var(--border)"></div>
-  <a class="btn btn-s" id="guideBtn" href="navod.html" target="_blank" rel="noopener" style="margin-top:6px;display:block;text-align:center;text-decoration:none;box-sizing:border-box">📖 Návod – ako začať</a>
+  <a class="btn btn-s" id="guideBtn" href="navod.html" style="margin-top:6px;display:block;text-align:center;text-decoration:none;box-sizing:border-box">📖 Návod – ako začať</a>
   <button class="btn btn-s" style="margin-top:6px" onclick="openAbout()">✨ Čo je nové</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
 </div>
@@ -1039,8 +1039,10 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18.9';
+const APP_VERSION = '2026.11.19.1';
 const CHANGELOG = [
+  { v:'2026.11.19.1', items:['Návod sa otvára v aplikácii a má tlačidlo „Späť do aplikácie“; funguje aj tlačidlo Späť v telefóne'] },
+  { v:'2026.11.19', items:['Mapa, čítačka kódov a export do Excelu sú priamo v aplikácii — nezávisia od cudzích serverov','Čítačka kódov z fotky spoľahlivejšie prečíta štítok, aj keď je nalepený nastojato'] },
   { v:'2026.11.18.9', items:['PRO: synchronizácia posiela fotky zvlášť a len raz — menej dát, rýchlejšie, na druhom zariadení v plnej kvalite','Návod „Ako začať“ (Nastavenia → O aplikácii)','Mapa, čítačka kódov a export do Excelu sa načítajú z priečinka lib/, ak tam sú'] },
   { v:'2026.11.18.8', items:['PRO: cenová ponuka ako skutočné PDF — tlačidlo 📄 pri ponuke: v telefóne ju rovno pošleš (Gmail, WhatsApp…), na počítači sa uloží','Dlhé PDF sa delia na strany medzi riadkami, nie cez text'] },
   { v:'2026.11.18.7', items:['PRO: protokol ako skutočné PDF — ostrý text s diakritikou, dá sa vyhľadávať a kopírovať, menší súbor na e-mail; funguje aj bez signálu'] },
@@ -3826,6 +3828,27 @@ function useCameraPhoto(){
   document.getElementById('photoScanInput').click();
 }
 
+// Prečíta čiarový / QR kód z fotky: zmenší ju, nakreslí na plátno a skúsi rôzne spôsoby a otočenie.
+async function zxingFromFile(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image(); await new Promise((ok,no)=>{ img.onload=ok; img.onerror=no; img.src=url; });
+    const k=Math.min(1, 1600/Math.max(img.naturalWidth,img.naturalHeight));
+    const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+    const hints=new Map(); hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+    const rd=new ZXing.MultiFormatReader(); rd.setHints(hints);
+    for(const rot of [0,90]){
+      const cv=document.createElement('canvas'); cv.width=rot?h:w; cv.height=rot?w:h;
+      const g=cv.getContext('2d',{willReadFrequently:true}); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height);
+      if(rot){ g.translate(cv.width/2,cv.height/2); g.rotate(Math.PI/2); g.drawImage(img,-w/2,-h/2,w,h); } else g.drawImage(img,0,0,w,h);
+      const src=new ZXing.HTMLCanvasElementLuminanceSource(cv);
+      for(const Bin of [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer]){
+        try{ const r=rd.decode(new ZXing.BinaryBitmap(new Bin(src))); if(r && r.getText()) return r.getText(); }catch(e){}
+      }
+    }
+    return null;
+  } finally { URL.revokeObjectURL(url); }
+}
 async function scanFromPhoto(e){
   const file = e.target.files[0];
   if(!file) return;
@@ -3848,6 +3871,8 @@ async function scanFromPhoto(e){
     } catch(e){ console.error(e); }
   }
   if(window.ZXing){
+    // fotka sa prečíta priamo z plátna (spoľahlivejšie ako pomocná funkcia knižnice); skúsi aj otočenú o 90°
+    try{ const t=await zxingFromFile(file); if(t){ deliverScan(t); return; } }catch(e){ console.warn('ZXing foto',e); }
     const url=URL.createObjectURL(file);
     try{
       const hints=new Map(); hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
