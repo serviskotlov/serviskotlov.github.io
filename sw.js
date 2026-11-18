@@ -2,9 +2,10 @@
 // Vďaka nemu sa aplikácia otvorí aj bez internetu (kotolňa, pivnica) a knižnice z internetu sa držia v zariadení.
 // Dáta zákazníkov sa tu neukladajú — tie sú v úložisku aplikácie.
 // Pri zmene tohto súboru zvýš číslo verzie.
-const VERSION = 'sk-v1';
+const VERSION = 'sk-v2';
 const SHELL = VERSION + '-shell';
 const LIBS = 'sk-libs-v1';
+const LOCAL = 'sk-local-v1'; // knižnica a písma na PDF z priečinka lib/ (veľké, menia sa zriedka)
 
 // súbory aplikácie (relatívne k umiestneniu tohto súboru)
 const CORE = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
@@ -85,13 +86,26 @@ async function libFirst(event) {
   return r;
 }
 
+// lib/ (jsPDF, písma): z pamäte, ak sú; inak zo siete a uložia sa. Nová verzia súboru = nový názov alebo nové LOCAL.
+async function localLib(event) {
+  const cache = await caches.open(LOCAL);
+  const key = event.request.url.split('?')[0];
+  const cached = await cache.match(key);
+  if (cached) return cached;
+  const r = await fetch(event.request);
+  if (r.ok) cache.put(key, r.clone());
+  return r;
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     const base = new URL(scope()).pathname;
-    if (req.mode === 'navigate' && (url.pathname === base || url.pathname === base + 'index.html')) {
+    if (url.pathname.startsWith(base + 'lib/')) {
+      event.respondWith(localLib(event));
+    } else if (req.mode === 'navigate' && (url.pathname === base || url.pathname === base + 'index.html')) {
       event.respondWith(appShell(event));
     } else if (CORE.slice(1).some((f) => url.pathname === base + f)) {
       event.respondWith(staleWhileRevalidate(event));
