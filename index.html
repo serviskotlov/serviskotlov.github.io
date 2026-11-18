@@ -572,7 +572,9 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
 
   <div class="stitle">ℹ️ O aplikácii</div>
   <div id="aboutBox" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8"></div>
-  <button class="btn btn-s" style="margin-top:8px" onclick="openAbout()">✨ Čo je nové</button>
+  <button class="btn btn-p" id="updBtn" style="margin-top:8px" onclick="updateApp()">🔄 Stiahnuť aktuálnu verziu</button>
+  <div id="updStatus" style="display:none;font-family:var(--mono);font-size:11px;line-height:1.6;margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1px solid var(--border)"></div>
+  <button class="btn btn-s" style="margin-top:6px" onclick="openAbout()">✨ Čo je nové</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
 </div>
 
@@ -1024,8 +1026,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18.5';
+const APP_VERSION = '2026.11.18.6';
 const CHANGELOG = [
+  { v:'2026.11.18.6', items:['Nastavenia → O aplikácii: tlačidlo „Stiahnuť aktuálnu verziu“ — hneď stiahne novú verziu aplikácie aj funkcií PRO a reštartuje'] },
   { v:'2026.11.18.5', items:['PRO: rozpísaná cenová ponuka sa priebežne ukladá v telefóne — nestratí sa pri zatvorení, prepnutí zákazníka ani reštarte; na Prehľade pripomienka „dokonči“','Nastavenia: Úložisko a Záloha do priečinka sú zbalené, stav vidno pri nadpise'] },
   { v:'2026.11.18.4', items:['Svetlý režim na čítanie vonku na slnku: Nastavenia → Vzhľad (tmavý, svetlý alebo podľa telefónu).'] },
   { v:'2026.11.18.3', items:['Uvítanie pri prvom spustení: krátky sprievodca nastaví údaje firmy a ponúkne prvého zákazníka, ukážku alebo obnovu zo zálohy.'] },
@@ -1580,6 +1583,75 @@ function renderAbout(){
     + 'PRO modul: '+esc(proModuleLabel())+'<br>'
     + (isInstalled() ? 'Nainštalovaná na ploche' : 'Otvorená v prehliadači');
 }
+// ── Ručná aktualizácia: zistí verziu na serveri, stiahne aplikáciu aj PRO modul a reštartuje ──
+function verCmp(a,b){
+  const A=String(a||'').split('.').map(n=>parseInt(n)||0), B=String(b||'').split('.').map(n=>parseInt(n)||0);
+  for(let i=0;i<Math.max(A.length,B.length);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; }
+  return 0;
+}
+function appBaseURL(){ return new URL('./', location.href).href; }   // priečinok aplikácie (aj keď je adresa …/index.html)
+let updBusy=false;
+async function updateApp(){
+  if(updBusy) return; updBusy=true;
+  const btn=document.getElementById('updBtn'), st=document.getElementById('updStatus');
+  const say=(html,col)=>{ st.style.display='block'; st.style.color=col||'var(--text)'; st.innerHTML=html; };
+  const done=()=>{ updBusy=false; btn.disabled=false; btn.textContent='🔄 Stiahnuť aktuálnu verziu'; };
+  btn.disabled=true; btn.textContent='⏳ Hľadám novú verziu…'; say('Pripájam sa na server…','var(--muted)');
+  try{
+    if(navigator.onLine===false){ say('📴 Telefón je bez internetu. Aktualizácia sa stiahne, keď budeš online.','var(--warn)'); return done(); }
+    // 1) aplikácia — mimo vyrovnávacej pamäte prehliadača aj servera
+    let html='', srvVer='';
+    try{
+      const r=await fetch(new URL('index.html?nocache='+Date.now(), appBaseURL()).href,{cache:'no-store'});
+      if(r.ok){ html=await r.text(); srvVer=(html.match(/const APP_VERSION\s*=\s*'([^']+)'/)||[])[1]||''; }
+    }catch(e){}
+    if(!srvVer){ say('⚠️ Server s aplikáciou sa nepodarilo načítať. Skontroluj internet a skús znova.','var(--warn)'); return done(); }
+    // 2) PRO modul
+    let mod={pro:false};
+    try{ mod=await SKLicense.checkModule(); }catch(e){ mod={pro:true,error:'network'}; }
+    const appNew=verCmp(srvVer,APP_VERSION)>0, appOlder=verCmp(srvVer,APP_VERSION)<0;
+    const modNew=!!(mod.pro && mod.ok && mod.stored && mod.running && mod.stored!==mod.running);
+    const modTxt=!mod.pro?'':(mod.ok?('PRO modul: '+esc(mod.stored||mod.running||'—')+(modNew?' <b style="color:var(--accent3)">· nový</b>':' · aktuálny')):'⚠️ PRO modul sa nepodarilo overiť (licenčný server neodpovedá)');
+    if(!appNew && !modNew){
+      say((appOlder
+          ? '✅ Máš verziu '+esc(APP_VERSION)+'. Na serveri je zatiaľ '+esc(srvVer)+' – nová verzia sa na serveri ešte len objavuje, skús to o pár minút.'
+          : '✅ Máš najnovšiu verziu '+esc(APP_VERSION)+'.')
+        +(modTxt?'<br>'+modTxt:''), appOlder?'var(--warn)':'var(--accent3)');
+      return done();
+    }
+    // 3) novú aplikáciu ulož do pamäte pre prácu bez internetu, aby sa po reštarte otvorila hneď nová
+    let scope=appBaseURL();
+    if(appNew && 'serviceWorker' in navigator){
+      try{
+        const reg=await navigator.serviceWorker.getRegistration();
+        if(reg){ scope=reg.scope; reg.update().catch(()=>{}); }
+        const key=(await caches.keys()).find(k=>/^sk-v.*-shell$/.test(k));
+        if(key) await (await caches.open(key)).put(scope, new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8'}}));
+      }catch(e){ console.warn('update cache',e); }
+    }
+    say('⬇️ Stiahnuté: '+(appNew?'aplikácia '+esc(srvVer):'')+(appNew&&modNew?' a ':'')+(modNew?'nový PRO modul':'')+'.<br>Aplikácia sa reštartuje…','var(--accent3)');
+    btn.textContent='🔄 Reštartujem…';
+    try{ localStorage.setItem('sk2_updAfter', JSON.stringify({from:APP_VERSION, to:appNew?srvVer:APP_VERSION, mod:modNew?mod.stored:''})); }catch(e){}
+    setTimeout(()=>{ location.replace(scope+'?u='+Date.now()); }, 1200);
+  }catch(e){
+    console.error(e); say('⚠️ Aktualizácia sa nepodarila: '+esc(e.message||e),'var(--danger)'); done();
+  }
+}
+// po reštarte: uprace adresu a potvrdí, čo sa nainštalovalo
+(function(){
+  try{
+    const q=new URLSearchParams(location.search);
+    if(q.has('u') && [...q.keys()].length===1) history.replaceState(null,'',location.pathname+location.hash);
+    const a=JSON.parse(localStorage.getItem('sk2_updAfter')||'null');
+    if(a){
+      localStorage.removeItem('sk2_updAfter');
+      setTimeout(()=>{
+        const ok=a.to===APP_VERSION;
+        showToast(ok?('✅ Aktualizované na verziu '+APP_VERSION+(a.mod?' · PRO modul '+a.mod:'')):'⚠️ Stále beží verzia '+APP_VERSION+' – zavri appku a otvor ju znova', ok?null:'var(--warn)');
+      },800);
+    }
+  }catch(e){}
+})();
 function openAbout(){
   document.getElementById('aboutBody').innerHTML=CHANGELOG.map((r,i)=>
     '<div style="font-family:var(--mono);font-size:12px;color:'+(i?'var(--muted)':'var(--accent)')+';margin:'+(i?'16px':'0')+' 0 6px">Verzia '+esc(r.v)+(r.v===APP_VERSION?' · táto verzia':'')+'</div>'
@@ -1768,16 +1840,18 @@ const SKLicense = (() => {
     });
     if (r.ok && r.code) {
       const mod = { version: r.version, code: r.code, sig: r.sig || '', markLen: r.markLen | 0 };
-      if (!(await moduleOk(mod))) { console.error('Server vydal PRO modul bez platného podpisu — odmietnutý'); return; }
+      if (!(await moduleOk(mod))) { console.error('Server vydal PRO modul bez platného podpisu — odmietnutý'); return { error: 'sig' }; }
       try { await api._store.set('pro', mod); } catch (_) {}
       // beží už staršia verzia: nová sa použije po novom otvorení aplikácie
       if (proVersion && proVersion !== mod.version && typeof showToast === 'function') {
         showToast('🔄 Stiahnutá nová verzia funkcií PRO — zavri a znova otvor aplikáciu', 'var(--accent)');
       }
       await runModule(mod);
+      return { ok: true, version: mod.version };
     } else if (cached) {
       await runModule(cached);
     }
+    return r.ok ? { ok: true, version: cached ? cached.version : '' } : { error: r.error || 'network' };
   }
 
   async function dropPro() {
@@ -1900,6 +1974,13 @@ const SKLicense = (() => {
 
   api.proReady = () => api.isPro() && !!globalThis.SKPro;
   api.proVersion = () => proVersion;
+  // ručná kontrola (Nastavenia → O aplikácii): stiahne najnovší PRO modul hneď
+  api.checkModule = async function () {
+    if (!api.isPro()) return { pro: false };
+    try { localStorage.setItem('sk_lic_modchk', String(Date.now())); } catch (_) {}
+    const r = (await syncPro()) || {};
+    return { pro: true, ok: !!r.ok, error: r.error || '', stored: r.version || '', running: proVersion || '' };
+  };
   // Volanie licenčného servera v mene tohto zariadenia (kľúč a ID zariadenia doplní samo).
   // Len pre služby Google Drive — iné adresy sa takto volať nedajú.
   api.serverCall = async function (path, data) {
