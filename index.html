@@ -1540,6 +1540,7 @@ const SKLicense = (() => {
   const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '6azbxcdV3lPA5t6_4zwY_Uaotm95CvqoWiYIWNo0biY', y: 'n1yM0ptVZNoptGyJfgZ53p0qVYLEs2OyY4sp20Oce3E' };
   const FREE_LIMIT = 10;
   const CHECK_EVERY = 24 * 3600 * 1000; // overenie na serveri raz denne
+  const MOD_CHECK_EVERY = 30 * 60 * 1000; // kontrola novej verzie PRO modulu
 
   const LS = { key: 'sk_lic_key', token: 'sk_lic_token', dev: 'sk_lic_device', checked: 'sk_lic_checked', msg: 'sk_lic_msg', seen: 'sk_lic_seen' };
   const MESSAGES = {
@@ -1651,6 +1652,10 @@ const SKLicense = (() => {
       const mod = { version: r.version, code: r.code, sig: r.sig || '', markLen: r.markLen | 0 };
       if (!(await moduleOk(mod))) { console.error('Server vydal PRO modul bez platného podpisu — odmietnutý'); return; }
       try { await api._store.set('pro', mod); } catch (_) {}
+      // beží už staršia verzia: nová sa použije po novom otvorení aplikácie
+      if (proVersion && proVersion !== mod.version && typeof showToast === 'function') {
+        showToast('🔄 Stiahnutá nová verzia funkcií PRO — zavri a znova otvor aplikáciu', 'var(--accent)');
+      }
       await runModule(mod);
     } else if (cached) {
       await runModule(cached);
@@ -1764,6 +1769,10 @@ const SKLicense = (() => {
     if (localStorage.getItem(LS.key) && (stale(last) || !payload)) {
       refresh(); // na pozadí, štart aplikácie nezdržiava (aj keď uložený token už neplatí)
     } else if (api.isPro() && !api.proReady()) {
+      syncPro();
+    } else if (api.isPro() && Date.now() - Number(localStorage.getItem('sk_lic_modchk') || 0) > MOD_CHECK_EVERY) {
+      // nová verzia PRO modulu sa hľadá pri každom otvorení (najviac raz za 30 minút), nie len raz denne
+      try { localStorage.setItem('sk_lic_modchk', String(Date.now())); } catch (_) {}
       syncPro();
     }
     return api.isPro();
