@@ -2,7 +2,7 @@
 // Vďaka nemu sa aplikácia otvorí aj bez internetu (kotolňa, pivnica) a knižnice z internetu sa držia v zariadení.
 // Dáta zákazníkov sa tu neukladajú — tie sú v úložisku aplikácie.
 // Pri zmene tohto súboru zvýš číslo verzie.
-const VERSION = 'sk-v3';
+const VERSION = 'sk-v4';
 const SHELL = VERSION + '-shell';
 const LIBS = 'sk-libs-v1';
 const LOCAL = 'sk-local-v1'; // knižnica a písma na PDF z priečinka lib/ (veľké, menia sa zriedka)
@@ -15,7 +15,6 @@ const LIB_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap',
 ];
 // rovnaké knižnice vo vlastnom priečinku lib/ (ak ich tam nahráš, majú prednosť)
