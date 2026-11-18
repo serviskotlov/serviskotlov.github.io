@@ -2,7 +2,7 @@
 // Vďaka nemu sa aplikácia otvorí aj bez internetu (kotolňa, pivnica) a knižnice z internetu sa držia v zariadení.
 // Dáta zákazníkov sa tu neukladajú — tie sú v úložisku aplikácie.
 // Pri zmene tohto súboru zvýš číslo verzie.
-const VERSION = 'sk-v2';
+const VERSION = 'sk-v3';
 const SHELL = VERSION + '-shell';
 const LIBS = 'sk-libs-v1';
 const LOCAL = 'sk-local-v1'; // knižnica a písma na PDF z priečinka lib/ (veľké, menia sa zriedka)
@@ -18,6 +18,13 @@ const LIB_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap',
 ];
+// rovnaké knižnice vo vlastnom priečinku lib/ (ak ich tam nahráš, majú prednosť)
+const LOCAL_OF = {
+  'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js': 'lib/zxing.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js': 'lib/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css': 'lib/leaflet.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js': 'lib/leaflet.min.js',
+};
 const LIB_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const NAV_TIMEOUT = 4000; // pri slabom signáli sa po 4 s ukáže uložená verzia
 
@@ -28,10 +35,19 @@ self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const shell = await caches.open(SHELL);
     await shell.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })));
-    // knižnice: čo sa nepodarí stiahnuť teraz, uloží sa pri prvom použití
+    // knižnice: ak sú v priečinku lib/ vedľa aplikácie, cudzí server sa nevolá vôbec.
+    // Čo sa nepodarí stiahnuť teraz, uloží sa pri prvom použití.
     const libs = await caches.open(LIBS);
+    const local = await caches.open(LOCAL);
     await Promise.all(LIB_URLS.map(async (u) => {
       try {
+        const own = LOCAL_OF[u];
+        if (own) {
+          const key = new URL(own, self.registration.scope).href;
+          if (await local.match(key)) return;
+          const r0 = await Promise.race([fetch(key, { cache: 'reload' }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 8000))]).catch(() => null);
+          if (r0 && r0.ok) { await local.put(key, r0); return; }
+        }
         if (await libs.match(u)) return;
         const r = await corsGet(u);
         if (r.ok) await libs.put(u, r);
