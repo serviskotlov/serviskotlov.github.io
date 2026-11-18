@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ServisKotlov PRO – návod: ako začať</title>
+<meta name="description" content="Krátky návod k aplikácii ServisKotlov PRO: inštalácia, zákazníci, servisné protokoly, cenové ponuky, pripomienky a zálohy.">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.65; max-width: 820px; margin: 0 auto; padding: 2rem 1.2rem 4rem; color: #1c2430; background: #fff; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .3rem; }
+  h2 { font-size: 1.25rem; margin: 2.6rem 0 .6rem; padding-top: .4rem; border-top: 1px solid #e3e8ef; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .3rem; }
+  p, li { font-size: 1rem; }
+  ol, ul { padding-left: 1.3rem; }
+  li { margin: .35rem 0; }
+  .meta { color: #5b6470; font-size: .92rem; margin-bottom: 1.4rem; }
+  .box { background: #f1f5f9; border-left: 4px solid #1f4e79; padding: .9rem 1.1rem; border-radius: 6px; margin: 1.2rem 0; }
+  .pro { display: inline-block; font-size: .72rem; font-weight: 700; color: #fff; background: #c2410c; border-radius: 4px; padding: 0 .35rem; vertical-align: middle; margin-left: .3rem; }
+  .toc { columns: 2; column-gap: 2rem; padding-left: 1.2rem; }
+  .toc li { break-inside: avoid; }
+  .step { display: flex; gap: 1.4rem; align-items: flex-start; margin: 1rem 0; }
+  .step .txt { flex: 1; min-width: 0; }
+  .shot { flex: 0 0 230px; margin: 0; }
+  .shot img { width: 230px; height: auto; border-radius: 14px; border: 1px solid #d5dbe3; box-shadow: 0 4px 16px rgba(13,27,42,.12); display: block; }
+  .shot figcaption { font-size: .8rem; color: #5b6470; text-align: center; margin-top: .3rem; }
+  kbd { font-family: inherit; background: #eef2f6; border: 1px solid #d5dbe3; border-bottom-width: 2px; border-radius: 5px; padding: 0 .35rem; font-size: .92em; white-space: nowrap; }
+  details { border: 1px solid #d5dbe3; border-radius: 8px; padding: .6rem .9rem; margin: .5rem 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  a { color: #1f4e79; }
+  .top { position: fixed; right: 1rem; bottom: 1rem; background: #1f4e79; color: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  @media (max-width: 640px) {
+    .step { flex-direction: column; }
+    .shot { flex-basis: auto; align-self: center; }
+    .toc { columns: 1; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1b2a; color: #dff0ff; }
+    h2 { border-top-color: #2a4058; }
+    .meta, .shot figcaption { color: #8aa3bd; }
+    .box { background: #132233; }
+    .shot img { border-color: #2a4058; }
+    kbd { background: #1a2e42; border-color: #2a4058; }
+    details { border-color: #2a4058; }
+    a { color: #5cc8e6; }
+  }
+  @media print { .top { display: none; } .shot img { box-shadow: none; } }
+</style>
+</head>
+<body id="hore">
+
+<h1>Návod: ako začať so ServisKotlov PRO</h1>
+<div class="meta">Aplikácia na evidenciu servisov kotlov, tepelných čerpadiel a elektrických kotlov · verzia 2026.11</div>
+
+<div class="box">
+  <strong>V skratke:</strong> pridáš zákazníka, po servise vyplníš protokol v telefóne, zákazník ho podpíše na displeji
+  a PDF mu pošleš e-mailom. Aplikácia ti sama postráži termíny ďalších prehliadok a pripomenie ich zákazníkom.
+  Funguje aj bez signálu – údaje sú uložené v tvojom telefóne.
+</div>
+
+<ol class="toc">
+  <li><a href="#instalacia">Inštalácia na plochu</a></li>
+  <li><a href="#prve-spustenie">Prvé spustenie</a></li>
+  <li><a href="#zakaznici">Zákazníci a zariadenia</a></li>
+  <li><a href="#prehlad">Prehľad a termíny</a></li>
+  <li><a href="#protokol">Servisný protokol</a></li>
+  <li><a href="#ponuka">Cenová ponuka</a></li>
+  <li><a href="#pripomienky">Pripomienky zákazníkom</a></li>
+  <li><a href="#plan">Plán a dohodnuté návštevy</a></li>
+  <li><a href="#zaloha">Záloha a Google Drive</a></li>
+  <li><a href="#licencia">Licencia PRO</a></li>
+  <li><a href="#aktualizacia">Aktualizácia</a></li>
+  <li><a href="#otazky">Časté otázky</a></li>
+</ol>
+
+<h2 id="instalacia">1. Inštalácia na plochu</h2>
+<p>Aplikácia sa neinštaluje z obchodu – otvoríš ju v prehliadači a pridáš si ju na plochu. Potom sa správa ako bežná aplikácia, má vlastnú ikonu a otvorí sa aj bez internetu.</p>
+<h3>Android (Chrome)</h3>
+<ol>
+  <li>Otvor adresu aplikácie v prehliadači <strong>Chrome</strong>.</li>
+  <li>Ťukni na <kbd>⋮</kbd> vpravo hore a vyber <strong>Inštalovať aplikáciu</strong> (alebo <strong>Pridať na plochu</strong>).</li>
+  <li>Potvrď. Ikona ServisKotlov sa objaví na ploche.</li>
+</ol>
+<h3>iPhone (Safari)</h3>
+<ol>
+  <li>Otvor adresu aplikácie v prehliadači <strong>Safari</strong>.</li>
+  <li>Ťukni na tlačidlo zdieľania <kbd>⬆︎</kbd> dole uprostred.</li>
+  <li>Vyber <strong>Pridať na plochu</strong> a potvrď <strong>Pridať</strong>.</li>
+</ol>
+<p>Na počítači to isté urobíš v Chrome alebo Edge ikonou inštalácie v adresnom riadku.</p>
+
+<h2 id="prve-spustenie">2. Prvé spustenie</h2>
+<div class="step">
+  <div class="txt">
+    <p>Pri prvom otvorení ťa privíta krátky sprievodca.</p>
+    <ol>
+      <li>Ťukni na <strong>Začať nastavenie</strong>.</li>
+      <li>Vyplň svoje meno, telefón a názov firmy. IČO a číslo oprávnenia sú nepovinné, ale vytlačia sa v hlavičke protokolu. Ak je firma platiteľom DPH, zaškrtni to – ceny v ponukách sa potom rozpíšu bez DPH a s DPH.</li>
+      <li>Vyber, ako chceš začať: <strong>pridať prvého zákazníka</strong>, <strong>pozrieť si ukážku</strong> (štyria vymyslení zákazníci) alebo <strong>obnoviť zálohu</strong> zo súboru.</li>
+    </ol>
+    <p>Všetko zmeníš neskôr v <strong>Nastaveniach</strong> – tam si pridáš aj logo a odfotenú pečiatku, ktoré sa vytlačia na protokoloch.</p>
+  </div>
+  <figure class="shot"><img src="navod/firma.jpg" alt="Sprievodca prvým spustením – údaje firmy" loading="lazy"><figcaption>Údaje firmy pri prvom spustení</figcaption></figure>
+</div>
+
+<h2 id="zakaznici">3. Zákazníci a zariadenia</h2>
+<div class="step">
+  <div class="txt">
+    <ol>
+      <li>Na karte <strong>Zákazníci</strong> ťukni na <kbd>+</kbd>.</li>
+      <li>Vyplň meno, telefón, e-mail a adresu. E-mail sa hodí na posielanie protokolov.</li>
+      <li>Na karte <strong>Zariadenia</strong> zadaj kotol (značku, model, výrobné číslo, typ). Výrobné číslo môžeš <strong>odčítať fotoaparátom</strong> zo štítka s čiarovým kódom.</li>
+      <li>Do poľa <strong>Nasledujúca prehliadka</strong> zadaj termín – podľa neho aplikácia stráži, kto príde na rad.</li>
+      <li>Ťukni na <strong>Uložiť zákazníka</strong>.</li>
+    </ol>
+    <p>Ak má zákazník viac zariadení (napr. kotol a tepelné čerpadlo), pridáš ich na karte <strong>Zariadenia</strong>. Každé má vlastné termíny aj protokoly. Na karte <strong>GPS</strong> doplníš polohu pre mapu a navigáciu.</p>
+  </div>
+  <figure class="shot"><img src="navod/zakaznik.jpg" alt="Formulár nového zákazníka" loading="lazy"><figcaption>Nový zákazník</figcaption></figure>
+</div>
+
+<h2 id="prehlad">4. Prehľad a termíny</h2>
+<div class="step">
+  <div class="txt">
+    <p><strong>Prehľad</strong> je prvá obrazovka. Ukazuje:</p>
+    <ul>
+      <li>počty zákazníkov – v poriadku, s termínom do 30 dní a <strong>po termíne</strong>,</li>
+      <li>zoznam <strong>Vyžadujú pozornosť</strong> – ťuknutím otvoríš zákazníka,</li>
+      <li>dohodnuté návštevy na dnes a zajtra a upozornenie, komu treba poslať pripomienku.</li>
+    </ul>
+    <p>Na karte zákazníka (ťukni na meno) sú jeho údaje, história servisov, protokoly, ponuky a fotky.</p>
+  </div>
+  <figure class="shot"><img src="navod/prehlad.jpg" alt="Prehľad – termíny a upozornenia" loading="lazy"><figcaption>Prehľad</figcaption></figure>
+</div>
+
+<h2 id="protokol">5. Servisný protokol <span class="pro">PRO</span></h2>
+<div class="step">
+  <div class="txt">
+    <ol>
+      <li>Otvor zákazníka, prejdi na kartu <strong>Protokoly</strong> a ťukni na <strong>Nový servisný protokol</strong>.</li>
+      <li>Šablóna sa vyberie podľa typu zariadenia – <strong>plynový kotol</strong> (analýza spalín), <strong>tepelné čerpadlo</strong> (chladivo, kontrola úniku) alebo <strong>elektrický kotol</strong> (merania po fázach). Ak bol u zákazníka protokol minulý rok, údaje sa predvyplnia a pri meraniach uvidíš minuloročné hodnoty.</li>
+      <li>Pri úkonoch ťukni <strong>Všetko OK</strong> a zmeň len to, čo bolo inak (✕ = chyba, – = netýka sa).</li>
+      <li>Doplň merania, vymenené diely, závady a záver.</li>
+      <li>Môžeš priložiť <strong>fotky</strong> zo zákazníkovej karty – vytlačia sa na strane Fotodokumentácia.</li>
+      <li>Zákazník sa <strong>podpíše prstom na displeji</strong>.</li>
+      <li>Ulož. Protokol sa zapíše aj do histórie servisov a posunie termín ďalšej prehliadky.</li>
+    </ol>
+  </div>
+  <figure class="shot"><img src="navod/ukony.jpg" alt="Vykonané úkony v protokole" loading="lazy"><figcaption>Úkony – „Všetko OK“ jedným ťuknutím</figcaption></figure>
+</div>
+<div class="step">
+  <div class="txt">
+    <h3>Poslanie zákazníkovi</h3>
+    <p>V zozname protokolov má každý protokol tlačidlá:</p>
+    <ul>
+      <li><kbd>✉️</kbd> <strong>e-mail</strong> – pripraví PDF a e-mail s vyplneným textom. V telefóne vyberieš Gmail, Outlook a pod. a PDF je v prílohe.</li>
+      <li><kbd>🖨️</kbd> <strong>tlač</strong> – vytlačí protokol alebo ho uloží cez „Uložiť ako PDF“.</li>
+      <li><kbd>✏️</kbd> úprava, <kbd>🗑️</kbd> vymazanie.</li>
+    </ul>
+    <p>PDF je skutočný dokument s textom – dá sa v ňom vyhľadávať a je malý, takže sa ľahko pošle aj cez mobilné dáta. <strong>Prázdny protokol na vypísanie</strong> vytlačíš pre prípad, že chceš písať rukou.</p>
+  </div>
+  <figure class="shot"><img src="navod/protokoly.jpg" alt="Zoznam protokolov s tlačidlami" loading="lazy"><figcaption>Protokoly zákazníka</figcaption></figure>
+</div>
+
+<h2 id="ponuka">6. Cenová ponuka <span class="pro">PRO</span></h2>
+<div class="step">
+  <div class="txt">
+    <ol>
+      <li>U zákazníka otvor kartu <strong>Ponuka</strong> a ťukni na <strong>Nová cenová ponuka</strong>.</li>
+      <li>Pridaj položky (popis, množstvo, jednotka, cena za jednotku <strong>bez DPH</strong>, sadzba DPH). Položky môžeš <strong>prevziať z protokolu</strong> – prácu, diely aj dopravu.</li>
+      <li>Ulož. Rozpísaná ponuka sa priebežne ukladá, takže sa nestratí ani keď ťa niekto vyruší – na Prehľade ťa pripomienka vráti späť.</li>
+      <li>Tlačidlom <kbd>📄</kbd> ponuku pošleš ako PDF (v telefóne rovno cez Gmail či WhatsApp), <kbd>🖨️</kbd> ju vytlačí a <kbd>📤</kbd> uloží položky do súboru pre fakturačný program.</li>
+    </ol>
+    <p>Cenová ponuka nie je faktúra. Faktúru vystav vo svojom fakturačnom programe.</p>
+  </div>
+  <figure class="shot"><img src="navod/ponuka.jpg" alt="Cenové ponuky zákazníka" loading="lazy"><figcaption>Cenové ponuky</figcaption></figure>
+</div>
+
+<h2 id="pripomienky">7. Pripomienky zákazníkom <span class="pro">PRO</span></h2>
+<div class="step">
+  <div class="txt">
+    <p>Keď sa blíži prehliadka, na Prehľade sa objaví <strong>Pripomenúť prehliadku</strong>. Po ťuknutí:</p>
+    <ol>
+      <li>Hore je <strong>Ďalší na rade</strong> – ťukni na <strong>Poslať SMS</strong> (alebo e-mail). V telefóne sa otvorí pripravená správa, ty ju len odošleš.</li>
+      <li>Po odoslaní sa hneď ukáže ďalší zákazník. Kto si to neželá, toho <strong>preskočíš</strong>.</li>
+      <li>Odoslané pripomienky sa označia, aby si nikomu nepísal dvakrát.</li>
+    </ol>
+    <p>Text správ si upravíš v <strong>Nastavenia → Pripomienky zákazníkom</strong>. Okrem ročnej prehliadky si môžeš viesť aj <strong>ďalšie termíny</strong> (odborná prehliadka, skúška, kontrola úniku chladiva) – <strong>Nastavenia → Ďalšie termíny</strong>.</p>
+  </div>
+  <figure class="shot"><img src="navod/pripomienky.jpg" alt="Pripomienky zákazníkom" loading="lazy"><figcaption>Pripomienky – jeden po druhom</figcaption></figure>
+</div>
+
+<h2 id="plan">8. Plán a dohodnuté návštevy</h2>
+<div class="step">
+  <div class="txt">
+    <p>Karta <strong>Plán</strong> zoradí prehliadky po mesiacoch. Keď sa so zákazníkom dohodneš na termíne, otvor ho a v rámčeku <strong>Dohodnutá návšteva</strong> zadaj dátum a čas. Potom môžeš:</p>
+    <ul>
+      <li>pridať návštevu <strong>do kalendára</strong> v telefóne (s pripomenutím hodinu vopred),</li>
+      <li>poslať zákazníkovi <strong>potvrdenie SMS</strong>.</li>
+    </ul>
+    <p>Na karte <strong>Mapa</strong> vidíš zákazníkov na mape a ťuknutím spustíš navigáciu (Google Maps, Waze…).</p>
+  </div>
+  <figure class="shot"><img src="navod/plan.jpg" alt="Plán prehliadok" loading="lazy"><figcaption>Plán</figcaption></figure>
+</div>
+
+<h2 id="zaloha">9. Záloha a Google Drive</h2>
+<div class="box">
+  Údaje sú uložené <strong>len v tvojom telefóne</strong>. Ak telefón stratíš alebo sa pokazí, bez zálohy o ne prídeš. Zálohuj!
+</div>
+<div class="step">
+  <div class="txt">
+    <h3>Google Drive <span class="pro">PRO</span> – odporúčame</h3>
+    <ol>
+      <li><strong>Nastavenia → Google Drive záloha → Pripojiť Google Drive</strong>.</li>
+      <li>Prihlás sa svojím účtom Google a povoľ prístup. Pripojenie platí natrvalo.</li>
+      <li>Zapnutá <strong>synchronizácia</strong> potom sama ukladá zmeny na tvoj Disk Google a prenáša ich medzi telefónom, tabletom a počítačom pripojenými k tomu istému účtu.</li>
+    </ol>
+    <p>Aplikácia vidí na tvojom Disku len súbory, ktoré sama vytvorila – zálohu a priečinok <em>ServisKotlov-fotky</em>. K ostatným súborom prístup nemá.</p>
+    <h3>Záloha do súboru (aj v bezplatnej verzii)</h3>
+    <p><strong>Nastavenia → Export JSON (záloha)</strong> uloží všetky údaje do jedného súboru. Ulož si ho do počítača alebo pošli e-mailom sebe. Späť ho načítaš tlačidlom <strong>Import JSON</strong>. <strong>Export do Excelu</strong> slúži na prehľad, nie na obnovu.</p>
+  </div>
+  <figure class="shot"><img src="navod/drive.jpg" alt="Nastavenia – Google Drive" loading="lazy"><figcaption>Pripojenie Google Drive</figcaption></figure>
+</div>
+
+<h2 id="licencia">10. Licencia PRO</h2>
+<div class="step">
+  <div class="txt">
+    <p>Bezplatná verzia má obmedzený počet zákazníkov. Verzia <strong>PRO</strong> pridá neobmedzený počet zákazníkov, servisné protokoly s PDF a podpisom, cenové ponuky, pripomienky, zálohu a synchronizáciu cez Google Drive, mapu a ďalšie funkcie.</p>
+    <ol>
+      <li>Licenčný kľúč dostaneš po objednávke (kontakt nájdeš na stránke <a href="kontakt.html">Kontakt</a>).</li>
+      <li>Vlož ho v <strong>Nastavenia → Licencia</strong> a ťukni na <strong>Aktivovať licenciu</strong>.</li>
+      <li>Po aktivácii funguje aplikácia aj bez internetu; licenciu si overí, keď budeš online.</li>
+    </ol>
+    <p>Pri výmene telefónu najprv na starom ťukni na <strong>Odstrániť licenciu z tohto zariadenia</strong> – kľúč sa uvoľní pre nový telefón.</p>
+  </div>
+  <figure class="shot"><img src="navod/licencia.jpg" alt="Nastavenia – licencia" loading="lazy"><figcaption>Aktivácia licencie</figcaption></figure>
+</div>
+
+<h2 id="aktualizacia">11. Aktualizácia</h2>
+<div class="step">
+  <div class="txt">
+    <p>Aplikácia sa aktualizuje sama pri otvorení. Ak chceš novú verziu hneď, choď do <strong>Nastavenia → O aplikácii</strong> a ťukni na <strong>Stiahnuť aktuálnu verziu</strong>. Aplikácia sa reštartuje, údaje ostanú. Čo je nové, nájdeš pod tlačidlom <strong>Čo je nové</strong>.</p>
+    <p>Ak potrebuješ pomoc, ťukni na <strong>Skopírovať údaje pre podporu</strong> a vlož ich do správy – uvidíme verziu aplikácie a stav licencie (bez údajov o tvojich zákazníkoch).</p>
+    <p>V Nastaveniach si vyberieš aj <strong>svetlý režim</strong>, ktorý sa lepšie číta vonku na slnku.</p>
+  </div>
+  <figure class="shot"><img src="navod/aktualizacia.jpg" alt="Nastavenia – O aplikácii a aktualizácia" loading="lazy"><figcaption>O aplikácii</figcaption></figure>
+</div>
+
+<h2 id="otazky">12. Časté otázky</h2>
+<details>
+  <summary>Funguje aplikácia bez signálu?</summary>
+  <p>Áno. Po prvom otvorení s internetom funguje aj v pivnici či kotolni – zákazníci, protokoly, podpis aj PDF. Synchronizáciu s Google Drive dokončí sama, keď budeš opäť online.</p>
+</details>
+<details>
+  <summary>Mám nový telefón. Ako prenesiem údaje?</summary>
+  <p>S PRO: na novom telefóne nainštaluj aplikáciu, aktivuj licenciu (na starom ju najprv odstráň) a pripoj ten istý účet Google Drive – údaje sa stiahnu samé. Bez PRO: na starom telefóne urob <strong>Export JSON</strong>, súbor prenes do nového a tam daj <strong>Import JSON</strong>.</p>
+</details>
+<details>
+  <summary>Môžem aplikáciu používať na telefóne aj na počítači naraz?</summary>
+  <p>Áno, s PRO a zapnutou synchronizáciou cez Google Drive. Zmeny sa prenášajú automaticky. Ak by ste toho istého zákazníka upravili na dvoch zariadeniach naraz, ostane novšia úprava a aplikácia ťa na to upozorní.</p>
+</details>
+<details>
+  <summary>Vidí niekto údaje mojich zákazníkov?</summary>
+  <p>Nie. Údaje sú v tvojom zariadení a na tvojom vlastnom Disku Google. Prevádzkovateľ aplikácie k nim nemá prístup. Podrobnosti sú v <a href="zasady.html">zásadách ochrany osobných údajov</a>.</p>
+</details>
+<details>
+  <summary>Omylom som vymazal zákazníka. Dá sa to vrátiť?</summary>
+  <p>Ak máš zálohu (súbor JSON alebo Google Drive), obnov ju v Nastaveniach. Po obnove je v Nastaveniach aj tlačidlo <strong>Vrátiť dáta spred poslednej obnovy</strong>, keby si si to rozmyslel.</p>
+</details>
+<details>
+  <summary>Aplikácia píše „Zápis zastavený“. Čo s tým?</summary>
+  <p>Je to poistka – aplikácia neuloží stav, v ktorom by zrazu chýbali zákazníci alebo fotky. Zatvor aplikáciu a otvor ju znova. Ak sa to opakuje, skopíruj údaje pre podporu (Nastavenia → O aplikácii) a ozvi sa nám.</p>
+</details>
+
+<p style="margin-top:2.5rem;color:#5b6470;font-size:.9rem">ServisKotlov PRO · EGMONT s.r.o., Hviezdoslavova 7, 078 01 Sečovce · <a href="zasady.html">Ochrana osobných údajov</a> · <a href="kontakt.html">Kontakt</a></p>
+<a class="top" href="#hore" aria-label="Na začiatok">↑</a>
+</body>
+</html>
