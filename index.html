@@ -330,6 +330,9 @@ select option{background:#132233;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 input[type="date"]{color-scheme:dark;}
 input[type="file"]{display:none;}
+.wcrow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;}
+.wcdot{width:8px;height:8px;border-radius:50%;background:var(--border);}
+.wcdot.on{background:var(--accent);}
 </style>
 </head>
 <body>
@@ -642,7 +645,7 @@ input[type="file"]{display:none;}
 
   <!-- TAB: PHOTOS -->
   <div class="mtab-content" id="tab-photos">
-    <p style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;">Fotky sa ukladajú do lokálneho úložiska telefónu a pred uložením sa zmenšia. Max. 5 fotiek na zákazníka.<br><b style="color:var(--warn)">Po pridaní fotky ulož zákazníka tlačidlom nižšie.</b></p>
+    <p style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;">Fotky sa ukladajú do lokálneho úložiska telefónu a pred uložením sa zmenšia. Najviac 12 fotiek na zákazníka; vybrané sa dajú priložiť k protokolu.<br><b style="color:var(--warn)">Po pridaní fotky ulož zákazníka tlačidlom nižšie.</b></p>
     <div id="photoStorageInfo" style="font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-bottom:8px;"></div>
     <div class="photo-grid" id="photoGrid">
       <div class="photo-add" onclick="document.getElementById('photoInput').click()">📷</div>
@@ -850,6 +853,44 @@ input[type="file"]{display:none;}
 </div>
 <div id="pdfBusy"><div style="font-size:30px">📄</div><div>Pripravujem PDF…</div></div>
 
+<!-- MODAL: UVÍTANIE PRI PRVOM SPUSTENÍ -->
+<div class="ov-bg" id="welcomeModal">
+<div class="modal">
+  <div class="mdrag"></div>
+  <div class="mtitle"><span id="wcTitle">👋 Vitaj</span><button class="mclose" onclick="welcomeClose()" aria-label="Preskočiť">✕</button></div>
+  <div id="wcDots" style="display:flex;gap:6px;justify-content:center;margin:-4px 0 12px"></div>
+  <div id="wcStep1" class="wcstep" style="font-size:13px;line-height:1.6">
+    <p style="margin:0 0 10px">Servis kotlov ti postráži termíny servisov a revízií, vyplní protokol a pripomenie zákazníkom, že sa blíži prehliadka.</p>
+    <div class="wcrow">📅 <span><b>Termíny</b> – na Prehľade vidíš, kto je po termíne a kto príde na rad.</span></div>
+    <div class="wcrow">📋 <span><b>Protokoly</b> – vyplníš v telefóne, zákazník podpíše na displeji.</span></div>
+    <div class="wcrow">📴 <span><b>Bez signálu</b> – údaje sú v tvojom telefóne, appka funguje aj v pivnici.</span></div>
+    <button class="btn btn-p" style="margin-top:14px" onclick="welcomeStep(2)">Začať nastavenie ›</button>
+    <button class="btn btn-s" style="margin-top:6px" onclick="welcomeClose()">Preskočiť, nastavím neskôr</button>
+  </div>
+  <div id="wcStep2" class="wcstep" style="display:none" oninput="document.getElementById('wcErr').style.display='none'">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Tieto údaje sa zobrazia v hlavičke protokolov, ponúk a v pripomienkach zákazníkom. Neskôr ich zmeníš v Nastaveniach.</div>
+    <div class="fg"><label class="fl">Meno technika</label><input class="fi" id="wcName" placeholder="Ján Novák" autocomplete="name"></div>
+    <div class="fg"><label class="fl">Telefón</label><input class="fi" id="wcPhone" type="tel" placeholder="+421 911 ..." autocomplete="tel"></div>
+    <div class="fg"><label class="fl">Názov firmy</label><input class="fi" id="wcFirma" placeholder="Názov vašej firmy" autocomplete="organization"></div>
+    <div class="fg"><label class="fl">IČO <span style="color:var(--muted)">(nepovinné)</span></label><input class="fi" id="wcIco" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Oprávnenie č. <span style="color:var(--muted)">(nepovinné)</span></label><input class="fi" id="wcOpr"></div>
+    <label class="chkline"><input type="checkbox" id="wcVat"> Firma je platiteľom DPH</label>
+    <div id="wcErr" style="display:none;color:var(--danger);font-size:12px;margin-top:6px"></div>
+    <button class="btn btn-p" style="margin-top:12px" onclick="welcomeSaveFirm()">Uložiť a pokračovať ›</button>
+    <button class="btn btn-s" style="margin-top:6px" onclick="welcomeStep(1)">‹ Späť</button>
+  </div>
+  <div id="wcStep3" class="wcstep" style="display:none;font-size:13px;line-height:1.6">
+    <p style="margin:0 0 10px">Hotovo. Ako chceš začať?</p>
+    <button class="btn btn-p" onclick="welcomeFinish('add')">➕ Pridať prvého zákazníka</button>
+    <div style="font-size:11px;color:var(--muted);margin:4px 2px 10px">Ukážkoví zákazníci sa pritom odstránia.</div>
+    <button class="btn btn-o" onclick="welcomeFinish('demo')">🧪 Najprv si pozriem ukážkových zákazníkov</button>
+    <div style="font-size:11px;color:var(--muted);margin:4px 2px 10px">Odstrániš ich neskôr v Nastaveniach, do limitu sa nepočítajú.</div>
+    <button class="btn btn-o" onclick="welcomeFinish('restore')">📂 Mám zálohu – obnoviť zo súboru</button>
+    <div style="font-size:11px;color:var(--muted);margin:4px 2px 0">Súbor .json, ktorý si si predtým uložil cez Zálohu. S verziou PRO sa dá obnoviť aj z Google Drive (Nastavenia → Google Drive).</div>
+  </div>
+</div>
+</div>
+
 <!-- MODAL: LIMIT / LICENCIA -->
 <div class="ov-bg" id="aboutModal">
 <div class="modal">
@@ -925,8 +966,18 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.18';
+const APP_VERSION = '2026.11.18.3';
 const CHANGELOG = [
+  { v:'2026.11.18.3', items:['Uvítanie pri prvom spustení: krátky sprievodca nastaví údaje firmy a ponúkne prvého zákazníka, ukážku alebo obnovu zo zálohy.'] },
+  { v:'2026.11.18.2', items:[
+    'PRO: dohodnutá návšteva — do kalendára v telefóne, potvrdenie SMS, prehľad v Pláne a na Prehľade',
+    'PRO: fotky ako príloha protokolu (strana Fotodokumentácia); najviac 12 fotiek na zákazníka',
+    'PRO: prehľad tržieb po mesiacoch a export pre účtovníka',
+    'PRO: pripomienky po rade — „Ďalší na rade“ jedným ťuknutím',
+    'PRO: ďalšie termíny pri zariadení — odborná prehliadka, skúška, kontrola úniku chladiva; v Pláne aj v pripomienkach',
+    'PRO: nový protokol prevezme údaje z minulého roka a ukáže minuloročné merania na porovnanie',
+    'Nová verzia funkcií PRO sa stiahne pri ďalšom otvorení aplikácie, nie až o deň',
+  ]},
   { v:'2026.11.18', items:[
     'PRO: synchronizácia medzi telefónom a počítačom cez Google Drive',
     'PRO: Google Drive ostáva pripojený natrvalo — netreba sa prihlasovať každú hodinu',
@@ -2097,6 +2148,73 @@ function seedDemoIfEmpty(){
 }
 
 // ═══════════════════════════════════════════════
+// UVÍTANIE PRI PRVOM SPUSTENÍ
+// Zobrazí sa len na úplne novej inštalácii: žiadni vlastní zákazníci,
+// nevyplnené meno ani firma a uvítanie sa ešte neukázalo.
+// ═══════════════════════════════════════════════
+function needsWelcome(){
+  try{ if(localStorage.getItem('sk2_welcomed')) return false; }catch(e){ return false; }
+  if(storageWiped || storageFailed) return false;
+  if(countedCusts()>0) return false;
+  if((settings.name||'').trim() || (settings.firma||'').trim()) return false;
+  return true;
+}
+function maybeWelcome(){
+  if(!needsWelcome()) return;
+  try{ localStorage.setItem('sk2_welcomed','1'); }catch(e){}
+  welcomeStep(1);
+  document.getElementById('welcomeModal').classList.add('open');
+}
+function welcomeStep(n){
+  [1,2,3].forEach(i=>{ const el=document.getElementById('wcStep'+i); if(el) el.style.display=i===n?'block':'none'; });
+  document.getElementById('wcTitle').textContent=['👋 Vitaj v Servis kotlov','🏢 Tvoja firma','✅ Pripravené'][n-1];
+  document.getElementById('wcDots').innerHTML=[1,2,3].map(i=>'<span class="wcdot'+(i<=n?' on':'')+'"></span>').join('');
+  if(n===2){
+    document.getElementById('wcName').value=settings.name||'';
+    document.getElementById('wcPhone').value=settings.phone||'';
+    document.getElementById('wcFirma').value=settings.firma||'';
+    document.getElementById('wcIco').value=settings.ico||'';
+    document.getElementById('wcOpr').value=settings.opravnenie||'';
+    document.getElementById('wcVat').checked=isVatPayer();
+    document.getElementById('wcErr').style.display='none';
+  }
+}
+function welcomeSaveFirm(){
+  const v=id=>document.getElementById(id).value.trim();
+  const name=v('wcName'), firma=v('wcFirma'), phone=v('wcPhone');
+  const err=document.getElementById('wcErr');
+  if(!name && !firma){ err.textContent='Vyplň aspoň meno alebo názov firmy.'; err.style.display='block'; return; }
+  if(phone && phone.replace(/[^0-9]/g,'').length<9){ err.textContent='Telefón vyzerá neúplne – skontroluj ho, prípadne ho nechaj prázdny.'; err.style.display='block'; return; }
+  settings.name=name; settings.firma=firma; settings.phone=phone;
+  settings.ico=v('wcIco'); settings.opravnenie=v('wcOpr');
+  settings.vatPayer=document.getElementById('wcVat').checked;
+  if(!saveSett()) return;
+  if(settings.name){ const tl=document.getElementById('techLabel'); if(tl) tl.textContent=settings.name; }
+  loadSett(); renderDash();
+  try{ renderLicUI(); }catch(e){}
+  welcomeStep(3);
+}
+function welcomeClose(){
+  document.getElementById('welcomeModal').classList.remove('open');
+}
+async function welcomeFinish(how){
+  welcomeClose();
+  if(how==='add'){
+    if(custs.some(c=>c.demo)){
+      const prevAll=custs;
+      custs=custs.filter(c=>!c.demo);
+      if(!(await save({allowLess:true, allowEmpty:true}))){ if(!lastSaveReloaded) custs=prevAll; }
+      renderCusts(); renderDash(); try{ renderLicUI(); }catch(e){}
+    }
+    openAdd();
+  } else if(how==='restore'){
+    document.getElementById('importFile').click();
+  } else {
+    pg('dashboard');
+  }
+}
+
+// ═══════════════════════════════════════════════
 // Štart úložiska: načítanie, presun starých dát, ochrana
 // ═══════════════════════════════════════════════
 async function bootStorage(){
@@ -2169,6 +2287,7 @@ async function bootStorage(){
   renderDash(); renderCusts();
   updateStorageUI();
   updateFolderUI();
+  setTimeout(()=>{ try{ maybeWelcome(); }catch(e){ console.error(e); } }, 300);
 }
 
 // ═══════════════════════════════════════════════
@@ -2611,11 +2730,13 @@ function fileToDataURL(f){
     r.readAsDataURL(f);
   });
 }
+// Fotky sú v samostatnom úložisku, takže limit môže byť vyšší; slúžia aj ako prílohy protokolov.
+const MAX_PHOTOS=12;
 async function handlePhotos(e){
   const files=[...e.target.files];
   e.target.value='';
   if(!files.length)return;
-  if(currentEditPhotos.length+files.length>5){alert('Max. 5 fotiek na zákazníka.');return;}
+  if(currentEditPhotos.length+files.length>MAX_PHOTOS){alert('Najviac '+MAX_PHOTOS+' fotiek na zákazníka.');return;}
   showToast('⏳ Spracúvam fotky…','var(--accent)');
   let added=0;
   for(const f of files){
@@ -3607,7 +3728,7 @@ document.addEventListener('keydown', e=>{
 // ═══════════════════════════════════════════════
 (function(){
   const $=id=>document.getElementById(id);
-  const ORDER=['remindModal','aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
+  const ORDER=['welcomeModal','remindModal','aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
   const FORMS=['custModal','histModal','protoModal'];
   const CLOSE={
     devPickModal:()=>closeDevPick(), histModal:()=>closeHM(), protoModal:()=>closePM(), custModal:()=>closeCM(), detailModal:()=>closeDM(),
