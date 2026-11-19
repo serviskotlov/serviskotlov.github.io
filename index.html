@@ -392,6 +392,20 @@ details.sk-fold[open]>summary .sk-arr{transform:rotate(90deg)}
 details.sk-fold>summary .sk-sum{order:1;text-transform:none;letter-spacing:0;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
 details.sk-fold>summary .sk-sum.warn{color:var(--warn)}
 details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
+.prbox{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.prhd{font-weight:600;font-size:13px;margin-bottom:8px}
+.prrow{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--surf)}
+.prrow.cur{border-color:var(--accent3);background:rgba(6,214,160,.07)}
+.prrow.low{opacity:.5}
+.prnm{font-weight:600;font-size:13px}
+.prlim{font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400;margin-top:2px}
+.prpr{text-align:right;font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.4}
+.prpr b{display:block;font-size:15px;color:var(--text)}
+.prpr span{display:block}
+.prbtn{grid-column:1/-1;margin:2px 0 0;padding:8px;font-size:12px;text-align:center;text-decoration:none;display:block;box-sizing:border-box}
+.prtag{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:6px;background:var(--accent);color:var(--bg);vertical-align:middle;margin-left:4px}
+.prtag.cur{background:var(--accent3)}
+.prnote{font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.6;margin-top:6px}
 .wcrow{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;}
 .wcdot{width:8px;height:8px;border-radius:50%;background:var(--border);}
 .wcdot.on{background:var(--accent);}
@@ -590,6 +604,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <button class="btn btn-p" id="updBtn" style="margin-top:8px" onclick="updateApp()">🔄 Stiahnuť aktuálnu verziu</button>
   <div id="updStatus" style="display:none;font-family:var(--mono);font-size:11px;line-height:1.6;margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1px solid var(--border)"></div>
   <a class="btn btn-s" id="guideBtn" href="navod.html" style="margin-top:6px;display:block;text-align:center;text-decoration:none;box-sizing:border-box">📖 Návod – ako začať</a>
+  <div style="text-align:center;font-family:var(--mono);font-size:10px;margin-top:8px"><a href="obchodne-podmienky.html" style="color:var(--muted)">Obchodné podmienky</a> · <a href="zasady.html" style="color:var(--muted)">Ochrana osobných údajov</a></div>
   <button class="btn btn-s" style="margin-top:6px" onclick="openAbout()">✨ Čo je nové</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
 </div>
@@ -1042,8 +1057,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.19.3';
+const APP_VERSION = '2026.11.19.4';
 const CHANGELOG = [
+  { v:'2026.11.19.4', items:['Cenník licencií PRO v Nastaveniach a v okne limitu — objednávka, predĺženie a vyšší stupeň jedným ťuknutím','Upozornenie na Prehľade 30 dní pred koncom licencie'] },
   { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
   { v:'2026.11.19.2', items:['Odolnejší import zálohy: protokol s poškodeným zoznamom dielov sa dá otvoriť'] },
   { v:'2026.11.19.1', items:['Návod sa otvára v aplikácii a má tlačidlo „Späť do aplikácie“; funguje aj tlačidlo Späť v telefóne'] },
@@ -1740,9 +1756,54 @@ function saveSett(){
 // ═══════════════════════════════════════════════
 const FREE_LIMIT = 10;
 const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
-const PRO_FEATURES = ['Neobmedzený počet zákazníkov','Servisné protokoly — tlač, PDF, e-mail','Cenové ponuky a kalkulácie',
+const PRO_FEATURES = ['Viac zákazníkov (100, 400 alebo neobmedzene)','Servisné protokoly — tlač, PDF, e-mail','Cenové ponuky a kalkulácie',
   'Záloha na Google Drive a do priečinka','Export do Excelu, mapa zákazníkov, hromadné GPS'];
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
+// ── Cenník licencií PRO (ročná licencia, 2 zariadenia). Ceny bez DPH; DPH 23 %.
+const PRICE_TIERS = [
+  { name:'PRO Štart',       limit:100, price:49 },
+  { name:'PRO',             limit:400, price:89 },
+  { name:'PRO Neobmedzené', limit:0,   price:129 }
+];
+const PRICE_VAT = 0.23, PRICE_DEVICES = 2;
+const eur = n => (Math.round(n*100)/100).toLocaleString('sk-SK',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+function tierOf(limit){ const l=(limit===Infinity||!limit)?0:limit; return PRICE_TIERS.find(t=>t.limit===l)||null; }
+function tierName(limit){ const t=tierOf(limit); return t?t.name:('PRO do '+limit+' zákazníkov'); }
+function orderMail(t, kind){
+  const S=settings||{};
+  const subj='Objednávka licencie ServisKotlov '+t.name+(kind==='renew'?' – predĺženie':(kind==='up'?' – prechod na vyšší stupeň':''));
+  const body='Dobrý deň,\n\nobjednávam licenciu ServisKotlov '+t.name+' ('+(t.limit?'do '+t.limit:'neobmedzený počet')+' zákazníkov, 12 mesiacov, '+PRICE_DEVICES+' zariadenia) za '
+    +eur(t.price)+' bez DPH ('+eur(t.price*(1+PRICE_VAT))+' s DPH).\n'
+    +(kind==='renew'?'Ide o predĺženie licencie končiacej sa …'+(LIC.key||'').slice(-5)+'.\n':'')
+    +(kind==='up'?'Ide o prechod z licencie …'+(LIC.key||'').slice(-5)+' — prosím o doplatok rozdielu.\n':'')
+    +'\nFakturačné údaje:\nFirma / meno: '+(S.firma||S.name||'')+'\nAdresa: '+(S.addr||'')+'\nIČO: '+(S.ico||'')+'\nDIČ / IČ DPH: '+(S.dic||'')+'\nE-mail: '+(S.email||'')+'\nTelefón: '+(S.phone||'')
+    +'\n\nOboznámil(a) som sa s obchodnými podmienkami: '+new URL('obchodne-podmienky.html',location.href).href+'\n';
+  return 'mailto:'+LIC_SELLER.email+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+}
+function pricingHTML(){
+  const used=countedCusts();
+  const cur=LIC.valid?tierOf(LIC.limit):null;
+  const curLim=LIC.valid?(LIC.limit===Infinity?Infinity:LIC.limit):FREE_LIMIT;
+  const soon=LIC.valid && LIC.exp && LIC.exp-Date.now()<45*864e5;
+  const fit=PRICE_TIERS.find(t=>!t.limit || t.limit>=Math.max(used*1.3, used+10));
+  const rows=PRICE_TIERS.map(t=>{
+    const tl=t.limit||Infinity, isCur=cur===t, lower=LIC.valid && tl<curLim;
+    const kind=isCur?'renew':(LIC.valid?'up':'new');
+    const tag=isCur?'<span class="prtag cur">tvoj stupeň</span>':(!LIC.valid && t===fit?'<span class="prtag">odporúčame</span>':'');
+    // e-mail sa poskladá až pri ťuknutí — s aktuálnymi fakturačnými údajmi z Nastavení
+    const btn=lower?'':`<a class="btn ${isCur&&!soon?'btn-s':'btn-p'} prbtn" href="mailto:${esc(LIC_SELLER.email)}" onclick="this.href=orderMail(PRICE_TIERS[${PRICE_TIERS.indexOf(t)}],'${kind}')">${isCur?'Predĺžiť':(LIC.valid?'Prejsť vyššie':'Objednať')}</a>`;
+    return `<div class="prrow${isCur?' cur':''}${lower?' low':''}">
+      <div class="prnm">${esc(t.name)} ${tag}<div class="prlim">${t.limit?'do '+t.limit+' zákazníkov':'neobmedzený počet zákazníkov'}</div></div>
+      <div class="prpr"><b>${eur(t.price)}</b><span>bez DPH / rok</span><span>${eur(t.price*(1+PRICE_VAT))} s DPH</span></div>
+      ${btn}</div>`; }).join('');
+  return `<div class="prbox">
+    <div class="prhd">💶 Cenník licencií PRO</div>
+    ${rows}
+    <div class="prnote">Licencia platí 12 mesiacov od vydania kľúča, na ${PRICE_DEVICES} zariadenia (napr. telefón a počítač). Všetky stupne majú všetky funkcie PRO, líšia sa len počtom zákazníkov.
+    ${LIC.valid?' Pri prechode na vyšší stupeň doplácaš len pomernú časť rozdielu.':' Bezplatne do '+FREE_LIMIT+' zákazníkov.'}
+    Platba faktúrou, kľúč príde e-mailom po úhrade. <a href="obchodne-podmienky.html" style="color:var(--accent)">Obchodné podmienky</a></div>
+  </div>`;
+}
 
 const SKLicense = (() => {
   const SERVER = 'https://serviskotlov-licencie-v2.gappa1972.workers.dev';   // adresa Workera
@@ -2175,7 +2236,7 @@ function showLimitModal(){
       ${esc(LIC_SELLER.firma)}<br>
       ✉️ <a href="mailto:${esc(LIC_SELLER.email)}?subject=Licencia%20ServisKotlov%20PRO" style="color:var(--accent)">${esc(LIC_SELLER.email)}</a><br>
       📱 <a href="tel:${esc(LIC_SELLER.phone.replace(/\s/g,''))}" style="color:var(--accent)">${esc(LIC_SELLER.phone)}</a>
-    </div>`;
+    </div>${pricingHTML()}`;
   document.getElementById('licModal').classList.add('open');
 }
 
@@ -2247,13 +2308,15 @@ function renderLicUI(){
   if(box){
     let h;
     if(LIC.valid){
-      h=`<div style="font-weight:600;color:var(--accent3);margin-bottom:6px">✅ Licencia PRO aktívna</div>
+      const left=LIC.exp?Math.ceil((LIC.exp-Date.now())/864e5):null;
+      h=`<div style="font-weight:600;color:var(--accent3);margin-bottom:6px">✅ Licencia ${esc(tierName(LIC.limit))} aktívna</div>
          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
          Kľúč: …${esc((LIC.key||'').slice(-5))}<br>
          Zákazníkov: <span style="color:${LIC.limit!==Infinity&&used>=LIC.limit?'var(--danger)':'inherit'}">${used} / ${limitTxt()}</span><br>
-         Platnosť: ${LIC.exp?'do '+fmtTs(LIC.exp):'bez obmedzenia'}<br>
+         Platnosť: ${LIC.exp?'do '+fmtTs(LIC.exp)+(left!==null&&left<=45?' <span style="color:var(--warn)">· zostáva '+left+' dní</span>':''):'bez obmedzenia'}<br>
          Bez internetu funguje do: ${fmtTs(LIC.until)}
          ${SKLicense.proReady()?'':'<br><span style="color:var(--warn)">Funkcie PRO sa ešte nestiahli — pripoj sa na internet.</span>'}</div>`;
+      h+=`<details class="prfold"${left!==null&&left<=45?' open':''}><summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:10px">💶 Cenník, predĺženie a vyšší stupeň</summary>${pricingHTML()}</details>`;
     } else {
       const pct=Math.min(100,used/FREE_LIMIT*100);
       const col=used>=FREE_LIMIT?'var(--danger)':(used>=FREE_LIMIT-2?'var(--warn)':'var(--accent3)');
@@ -2265,7 +2328,8 @@ function renderLicUI(){
          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
            Verzia PRO: ${PRO_FEATURES.map(esc).join(' · ')}<br>
            Objednávka: ${esc(LIC_SELLER.email)} · ${esc(LIC_SELLER.phone)}
-           ${hasDemo?'<br>Ukážkoví zákazníci sa do limitu nepočítajú.':''}</div>`;
+           ${hasDemo?'<br>Ukážkoví zákazníci sa do limitu nepočítajú.':''}</div>
+         ${pricingHTML()}`;
     }
     box.innerHTML=h;
   }
@@ -2280,6 +2344,10 @@ function renderLicUI(){
     if(!LIC.valid && storageReady){
       const s=used>=FREE_LIMIT?'d':(used>=FREE_LIMIT-2?'w':'ok');
       parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, cenové ponuky, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+    }
+    if(LIC.valid && LIC.exp && LIC.exp-Date.now()<30*864e5){
+      const d=Math.max(0,Math.ceil((LIC.exp-Date.now())/864e5));
+      parts.push(`<div class="ai ${d<=7?'d':'w'}" onclick="pg('settings')"><div class="ai-ic">⏳</div><div class="ai-tx"><div class="ai-nm">Licencia končí o ${d} ${d===1?'deň':(d>=2&&d<=4?'dni':'dní')} (${fmtTs(LIC.exp)})</div><div class="ai-ds">Predĺž ju v Nastaveniach → Licencia, aby funkcie PRO nevypadli</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     if(LIC.valid && LIC.limit!==Infinity && used>=LIC.limit-2){
       parts.push(`<div class="ai ${used>=LIC.limit?'d':'w'}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Licencia · ${used} / ${LIC.limit} zákazníkov</div><div class="ai-ds">${used>=LIC.limit?'Limit je vyčerpaný — ďalších pridáš po prechode na vyšší stupeň':'Blížiš sa k limitu svojej licencie'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
