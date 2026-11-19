@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<!-- CSP: stránka môže komunikovať len s Cloudflare Workerom; súkromný kľúč modulu nemá kam inam uniknúť -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src https://*.workers.dev; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ServisKotlov PRO – správa licencií</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; max-width: 980px; margin: 1.5rem auto; padding: 0 1rem; color: #1c2430; }
+  h1 { font-size: 1.4rem; }
+  fieldset { border: 1px solid #d5dbe3; border-radius: 8px; margin: 0 0 1rem; padding: .8rem 1rem; }
+  legend { font-weight: 600; padding: 0 .4rem; }
+  label { display: inline-block; margin: .3rem .8rem .3rem 0; font-size: .9rem; }
+  input, select { padding: .45rem .5rem; font-size: .95rem; border: 1px solid #b8c1cc; border-radius: 6px; background: #fff; }
+  button { padding: .45rem .8rem; font-size: .9rem; border: 1px solid #b8c1cc; border-radius: 6px; background: #f3f5f8; cursor: pointer; }
+  button.primary { background: #c8102e; border-color: #c8102e; color: #fff; }
+  button.small { padding: .15rem .5rem; font-size: .78rem; margin-left: .5rem; }
+  .card { border: 1px solid #d5dbe3; border-radius: 8px; padding: .8rem 1rem; margin-bottom: .7rem; }
+  .card.off { background: #f6f6f6; color: #777; }
+  .who { font-weight: 600; font-size: 1.02rem; }
+  .key { font-family: monospace; font-size: 1.05rem; font-weight: 600; user-select: all; }
+  .meta { font-size: .88rem; margin: .35rem 0; }
+  .tag { display: inline-block; font-size: .75rem; padding: .1rem .5rem; border-radius: 99px; margin-left: .5rem; background: #dff3e3; color: #17642a; }
+  .tag.bad { background: #fde2e2; color: #9b1c1c; }
+  .tag.tier { background: #e3ecfb; color: #1f4e79; }
+  .actions button { margin: .2rem .3rem 0 0; }
+  #msg { margin: .6rem 0; font-weight: 600; min-height: 1.3rem; }
+  #newkey { display: none; border: 2px solid #17642a; border-radius: 8px; padding: .8rem 1rem; margin-bottom: 1rem; background: #f3fbf5; }
+  ul { margin: .2rem 0 .4rem; padding-left: 1.2rem; font-size: .85rem; }
+  li { margin: .15rem 0; }
+  details { margin-top: .5rem; }
+  summary { cursor: pointer; font-size: .88rem; color: #1f4e79; }
+  .toolbar { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .7rem; }
+  .toolbar input { flex: 1; min-width: 12rem; }
+</style>
+</head>
+<body>
+<h1>ServisKotlov PRO – správa licencií</h1>
+
+<fieldset>
+  <legend>Pripojenie</legend>
+  <label>Adresa servera <input id="server" size="36" placeholder="https://....workers.dev"></label>
+  <label>Admin token <input id="token" type="password" size="28"></label>
+  <button id="connect" class="primary">Načítať licencie</button>
+</fieldset>
+
+<fieldset>
+  <legend>Nová licencia</legend>
+  <label>Meno / firma zákazníka <input id="name" size="26" placeholder="Ján Novák – KÚRENIE NOVÁK"></label>
+  <label>E-mail zákazníka <input id="email" type="email" size="24"></label>
+  <label>Poznámka <input id="note" size="20"></label><br>
+  <label>Stupeň (počet zákazníkov) <select id="limit"></select></label>
+  <label>Platnosť
+    <select id="dur">
+      <option value="12">1 rok</option><option value="1">1 mesiac</option><option value="3">3 mesiace</option>
+      <option value="24">2 roky</option><option value="0">Bez obmedzenia</option><option value="custom">Vlastný dátum</option>
+    </select></label>
+  <label id="expwrap" style="display:none">Platí do (vrátane) <input id="expdate" type="date"></label>
+  <label>Zariadení <select id="maxdev"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
+  <button id="create" class="primary">Vytvoriť kľúč</button>
+</fieldset>
+
+<div id="newkey"></div>
+
+<fieldset>
+  <legend>PRO modul</legend>
+  <div class="meta" id="modinfo">Aktuálna verzia: —</div>
+  <label>Súbor (pro-module.js) <input id="modfile" type="file" accept=".js"></label>
+  <label>Verzia <input id="modver" size="14"></label><br>
+  <label>Podpisový kľúč modulu (MODULE_PRIVATE_JWK) <input id="modkey" type="password" size="44" autocomplete="off" placeholder='{"kty":"EC","crv":"P-256",…}'></label>
+  <button id="modup" class="primary">Podpísať a nahrať modul</button>
+  <div class="meta">Kľúč sa nikam neukladá ani neodosiela — modul sa podpíše v tomto prehliadači a na server ide len podpis.</div>
+</fieldset>
+
+<div id="msg"></div>
+<div class="toolbar">
+  <input id="filter" placeholder="Hľadať meno, e-mail, kľúč, poznámku…">
+  <button id="csv">⬇️ Stiahnuť zoznam (CSV)</button>
+</div>
+<div id="stats" class="meta"></div>
+<div id="list"></div>
+
+<script>
+const APP_URL = 'https://serviskotlov.github.io/';
+const TIERS = [[0, 'Neobmedzene'], [50, '50'], [100, '100'], [200, '200'], [500, '500']];
+
+const $ = (id) => document.getElementById(id);
+const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('sk-SK') : '—';
+const tierTxt = (n) => (Number(n) > 0 ? 'do ' + n + ' zákazníkov' : 'neobmedzene zákazníkov');
+// časová pečiatka -> RRRR-MM-DD v miestnom čase (pre pole typu date)
+const isoDay = (ts) => { if (!ts) return ''; const d = new Date(ts); const p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
+
+const ERRORS = {
+  unauthorized: 'Nesprávny admin token.',
+  too_many_attempts: 'Príliš veľa nesprávnych pokusov z tejto adresy. Skús to znova o 15 minút.',
+  signature_required: 'Server prijíma len podpísaný modul — vlož podpisový kľúč modulu.',
+  bad_signature: 'Podpis modulu nesedí s kľúčom nastaveným na serveri (MODULE_PUBLIC_JWK). Použil si správny podpisový kľúč?',
+  module_too_large: 'Modul je príliš veľký.',
+};
+
+let licenses = [];
+
+// Podpíše kód modulu súkromným kľúčom (ECDSA P-256 / SHA-256) a podpis si hneď overí.
+async function signModule(code, jwkText) {
+  let jwk;
+  try { jwk = JSON.parse(jwkText); } catch (_) { throw new Error('Podpisový kľúč nie je platný JSON — vlož celý MODULE_PRIVATE_JWK z generátora kľúčov.'); }
+  if (!jwk || jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.d) throw new Error('Toto nie je súkromný podpisový kľúč modulu (chýba časť „d“).');
+  const alg = { name: 'ECDSA', namedCurve: 'P-256' }, how = { name: 'ECDSA', hash: 'SHA-256' };
+  const data = new TextEncoder().encode(code);
+  const priv = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y, d: jwk.d }, alg, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign(how, priv, data));
+  const pub = await crypto.subtle.importKey('jwk', { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }, alg, false, ['verify']);
+  if (!(await crypto.subtle.verify(how, pub, sig, data))) throw new Error('Podpis sa nepodarilo overiť.');
+  let s = ''; for (const b of sig) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+try {
+  $('server').value = localStorage.getItem('sk_admin_server') || '';
+  $('token').value = sessionStorage.getItem('sk_admin_token') || '';
+} catch (_) {}
+
+function say(text) { $('msg').textContent = text; }
+
+async function api(method, path, data) {
+  const server = $('server').value.trim().replace(/\/$/, '');
+  try {
+    localStorage.setItem('sk_admin_server', server);
+    sessionStorage.setItem('sk_admin_token', $('token').value);
+  } catch (_) {}
+  const res = await fetch(server + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + $('token').value },
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  const out = await res.json();
+  if (!out.ok) throw new Error(ERRORS[out.error] || 'Chyba: ' + out.error);
+  return out;
+}
+
+function el(tag, props, children) {
+  const e = Object.assign(document.createElement(tag), props || {});
+  (children || []).forEach((c) => e.append(c));
+  return e;
+}
+
+function tierSelect(value) {
+  const s = el('select');
+  const v = Number(value) || 0;
+  const opts = TIERS.slice();
+  if (!opts.some((t) => t[0] === v)) opts.push([v, String(v)]); // vlastný limit zadaný inak
+  opts.forEach(([n, label]) => s.append(el('option', { value: String(n), textContent: label, selected: n === v })));
+  return s;
+}
+
+async function update(key, action, extra, question) {
+  if (question && !confirm(question)) return;
+  try {
+    await api('POST', '/admin/licenses/update', Object.assign({ key, action }, extra || {}));
+    await load();
+  } catch (e) { say(e.message); }
+}
+
+function mailText(l) {
+  return 'Dobrý deň,\n\nposielam licenčný kľúč k aplikácii ServisKotlov PRO.\n\n' +
+    'Kľúč: ' + l.key + '\n' +
+    'Rozsah: ' + tierTxt(l.customer_limit) + ', zariadení: ' + l.max_devices + '\n' +
+    'Platnosť: ' + (l.expires_at ? 'do ' + fmt(l.expires_at) : 'bez obmedzenia') + '\n\n' +
+    'Aktivácia: otvorte ' + APP_URL + ' → Nastavenia → Licencia, vložte kľúč a ťuknite na „Aktivovať licenciu“.\n';
+}
+function mailTo(l) {
+  location.href = 'mailto:' + encodeURIComponent(l.email || '') +
+    '?subject=' + encodeURIComponent('Licencia ServisKotlov PRO') + '&body=' + encodeURIComponent(mailText(l));
+}
+
+function statusOf(l) {
+  const expired = l.expires_at && l.expires_at < Date.now();
+  return l.revoked ? ['zrušená', true] : expired ? ['vypršala', true] : ['aktívna', false];
+}
+
+function card(l) {
+  const status = statusOf(l);
+  const c = el('div', { className: 'card' + (status[1] ? ' off' : '') });
+  if (l.name) c.append(el('div', { className: 'who', textContent: l.name }));
+  c.append(el('div', {}, [
+    el('span', { className: 'key', textContent: l.key }),
+    el('span', { className: 'tag' + (status[1] ? ' bad' : ''), textContent: status[0] }),
+    el('span', { className: 'tag tier', textContent: tierTxt(l.customer_limit) }),
+  ]));
+  c.append(el('div', { className: 'meta', textContent:
+    (l.email || 'bez e-mailu') + (l.note ? ' · ' + l.note : '') +
+    ' · vytvorená ' + fmt(l.created_at) +
+    ' · platí do ' + (l.expires_at ? fmt(l.expires_at) : 'bez obmedzenia') +
+    ' · zariadenia ' + l.devices.length + '/' + l.max_devices }));
+  if (l.devices.length) {
+    c.append(el('ul', {}, l.devices.map((d) => el('li', {}, [
+      (d.name || 'Zariadenie') + ' – aktivované ' + fmt(d.activated_at) + ', naposledy ' + fmt(d.last_seen),
+      el('button', { className: 'small', textContent: 'Odobrať', onclick: () =>
+        update(l.key, 'remove_device', { deviceId: d.device_id }, 'Odobrať toto zariadenie (' + (d.name || 'Zariadenie') + ')?') }),
+    ]))));
+  }
+  const a = el('div', { className: 'actions' });
+  a.append(el('button', { textContent: 'Kopírovať kľúč', onclick: () => {
+    navigator.clipboard.writeText(l.key).then(() => say('Kľúč skopírovaný.'));
+  } }));
+  a.append(el('button', { textContent: '✉️ Poslať e-mailom', onclick: () => mailTo(l) }));
+  a.append(el('button', { textContent: '+12 mesiacov', onclick: () => update(l.key, 'extend', { months: 12 }) }));
+  if (l.devices.length) a.append(el('button', { textContent: 'Uvoľniť zariadenia', onclick: () =>
+    update(l.key, 'reset_devices', null, 'Odhlásiť všetky zariadenia tejto licencie?\n(Vynuluje sa aj počítadlo aktivácií za posledných 30 dní.)') }));
+  a.append(l.revoked
+    ? el('button', { textContent: 'Obnoviť', onclick: () => update(l.key, 'restore') })
+    : el('button', { textContent: 'Zrušiť', onclick: () =>
+        update(l.key, 'revoke', null, 'Naozaj zrušiť licenciu ' + l.key + '?') }));
+  c.append(a);
+
+  // úprava údajov, stupňa, počtu zariadení a platnosti
+  const eName = el('input', { value: l.name || '', size: 24 });
+  const eMail = el('input', { value: l.email || '', size: 22 });
+  const eNote = el('input', { value: l.note || '', size: 20 });
+  const eTier = tierSelect(l.customer_limit);
+  const eDev = el('input', { type: 'number', min: 1, max: 50, value: l.max_devices, style: 'width:4.5rem' });
+  const eExp = el('input', { type: 'date', value: isoDay(l.expires_at) });
+  const eNoExp = el('input', { type: 'checkbox', checked: !l.expires_at });
+  eNoExp.onchange = () => { eExp.disabled = eNoExp.checked; };
+  eExp.disabled = eNoExp.checked;
+  const save = el('button', { className: 'primary', textContent: 'Uložiť zmeny', onclick: () => {
+    const ch = { name: eName.value.trim(), email: eMail.value.trim(), note: eNote.value.trim(),
+      limit: eTier.value, maxDevices: eDev.value };
+    if (eNoExp.checked) { if (l.expires_at) ch.expiresDate = null; }
+    else {
+      if (!eExp.value) return say('Zadaj dátum platnosti alebo zaškrtni „bez obmedzenia“.');
+      if (eExp.value !== isoDay(l.expires_at)) ch.expiresDate = eExp.value;
+    }
+    update(l.key, 'edit', ch);
+  } });
+  c.append(el('details', {}, [
+    el('summary', { textContent: 'Upraviť údaje, stupeň a platnosť' }),
+    el('div', {}, [
+      el('label', {}, ['Meno / firma ', eName]), el('label', {}, ['E-mail ', eMail]), el('label', {}, ['Poznámka ', eNote]),
+      el('br'),
+      el('label', {}, ['Stupeň ', eTier]), el('label', {}, ['Zariadení ', eDev]),
+      el('label', {}, ['Platí do (vrátane) ', eExp]), el('label', {}, [eNoExp, ' bez obmedzenia']),
+      save,
+    ]),
+  ]));
+  return c;
+}
+
+function render() {
+  const q = $('filter').value.trim().toLowerCase();
+  const shown = licenses.filter((l) => !q ||
+    [l.key, l.name, l.email, l.note].join(' ').toLowerCase().includes(q));
+  $('list').replaceChildren(...shown.map(card));
+  const active = licenses.filter((l) => !statusOf(l)[1]).length;
+  const soon = licenses.filter((l) => !l.revoked && l.expires_at && l.expires_at > Date.now() && l.expires_at < Date.now() + 30 * 86400000).length;
+  $('stats').textContent = licenses.length
+    ? 'Licencií: ' + licenses.length + ' · aktívnych: ' + active + ' · vyprší do 30 dní: ' + soon +
+      (q ? ' · zobrazených: ' + shown.length : '')
+    : '';
+}
+
+async function load() {
+  try {
+    licenses = (await api('GET', '/admin/licenses')).licenses;
+    render();
+    say('Načítané.');
+  } catch (e) { say(e.message || 'Server nie je dostupný.'); }
+}
+
+function csvText() {
+  const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const head = ['Kľúč', 'Meno', 'E-mail', 'Poznámka', 'Limit zákazníkov', 'Zariadenia', 'Max. zariadení', 'Vytvorená', 'Platí do', 'Stav'];
+  const rows = licenses.map((l) => [l.key, l.name || '', l.email || '', l.note || '',
+    Number(l.customer_limit) > 0 ? l.customer_limit : 'neobmedzene', l.devices.length, l.max_devices,
+    fmt(l.created_at), l.expires_at ? fmt(l.expires_at) : 'bez obmedzenia', statusOf(l)[0]]);
+  return '﻿' + [head, ...rows].map((r) => r.map(q).join(';')).join('\r\n');
+}
+
+async function loadModule() {
+  try {
+    const r = await api('GET', '/admin/module'), m = r.module;
+    $('modinfo').textContent = (m
+      ? 'Aktuálna verzia: ' + m.version + ' · ' + Math.round(m.size / 1024) + ' kB · nahraná ' + fmt(m.updated_at) +
+        ' · ' + (m.signed ? '✅ podpísaný' : '⚠️ BEZ PODPISU')
+      : 'Modul ešte nie je nahraný.') + (r.signatureRequired ? ' · server vyžaduje podpis' : '');
+  } catch (_) {}
+}
+
+TIERS.forEach(([n, label]) => $('limit').append(el('option', { value: String(n), textContent: label })));
+$('dur').onchange = () => { $('expwrap').style.display = $('dur').value === 'custom' ? '' : 'none'; };
+$('filter').oninput = render;
+$('csv').onclick = () => {
+  if (!licenses.length) return say('Najprv načítaj licencie.');
+  const a = el('a', { href: URL.createObjectURL(new Blob([csvText()], { type: 'text/csv;charset=utf-8' })), download: 'licencie-serviskotlov.csv' });
+  document.body.append(a); a.click(); a.remove();
+};
+
+$('modver').value = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+$('modup').onclick = async () => {
+  const f = $('modfile').files[0];
+  if (!f) return say('Vyberte súbor s modulom.');
+  try {
+    const code = await f.text();
+    const keyText = $('modkey').value.trim();
+    let sig = '';
+    if (keyText) sig = await signModule(code, keyText);
+    else if (!confirm('Nahrať modul BEZ PODPISU?\n\nAplikácia s nastaveným overovacím kľúčom (MODULE_PUBLIC_JWK) nepodpísaný modul nespustí — zákazníkom by prestali fungovať funkcie PRO.')) return;
+    await api('POST', '/admin/module', { code, version: $('modver').value.trim(), sig });
+    await loadModule();
+    say('Modul nahraný' + (sig ? ' a podpísaný' : ' bez podpisu') + '. Zákazníkom sa stiahne pri najbližšom dennom overení.');
+  } catch (e) { say(e.message); }
+};
+
+$('connect').onclick = () => { load(); loadModule(); };
+$('create').onclick = async () => {
+  const data = { name: $('name').value.trim(), email: $('email').value.trim(), note: $('note').value.trim(),
+    limit: $('limit').value, maxDevices: $('maxdev').value };
+  if ($('dur').value === 'custom') {
+    if (!$('expdate').value) return say('Zadaj dátum platnosti.');
+    data.expiresDate = $('expdate').value;
+  } else data.months = $('dur').value;
+  if (!data.name && !data.email) return say('Vyplň meno alebo e-mail zákazníka.');
+  try {
+    const l = (await api('POST', '/admin/licenses', data)).license;
+    l.devices = [];
+    $('name').value = ''; $('email').value = ''; $('note').value = '';
+    const box = $('newkey');
+    box.replaceChildren(
+      el('div', { className: 'meta', textContent: 'Nový kľúč pre: ' + (l.name || l.email) }),
+      el('div', { className: 'key', textContent: l.key }),
+      el('div', { className: 'meta', textContent: tierTxt(l.customer_limit) + ' · zariadení ' + l.max_devices +
+        ' · platí ' + (l.expires_at ? 'do ' + fmt(l.expires_at) : 'bez obmedzenia') }),
+      el('div', { className: 'actions' }, [
+        el('button', { className: 'primary', textContent: '📋 Kopírovať kľúč', onclick: () =>
+          navigator.clipboard.writeText(l.key).then(() => say('Kľúč skopírovaný.')) }),
+        el('button', { textContent: '✉️ Poslať e-mailom', onclick: () => mailTo(l) }),
+      ]));
+    box.style.display = 'block';
+    await load();
+    say('Licencia vytvorená.');
+  } catch (e) { say(e.message); }
+};
+</script>
+</body>
+</html>

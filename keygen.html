@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<!-- CSP: generátor kľúčov nesmie nič posielať po sieti -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ServisKotlov PRO – generátor kľúčov</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  textarea { width: 100%; height: 5.5rem; font-family: monospace; font-size: .85rem; box-sizing: border-box; }
+  button { padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; }
+  h2 { margin-top: 2rem; font-size: 1.1rem; }
+  .warn { background: #fff3cd; padding: .6rem .8rem; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1>Generátor kľúčov</h1>
+<p>Všetko sa generuje vo vašom prehliadači, nič sa nikam neodosiela.</p>
+
+<h2>A. Podpisový kľúč PRO modulu</h2>
+<p>Samostatný kľúč, ktorým sa v admin.html podpisuje PRO modul. Aplikácia spustí len modul s platným podpisom,
+takže ani ten, kto by sa dostal k serveru alebo k admin tokenu, zákazníkom nepodstrčí vlastný kód.
+Dá sa vygenerovať kedykoľvek — licenčných kľúčov sa to netýka.</p>
+<button id="gomod">Vygenerovať podpisový kľúč modulu</button>
+
+<h2>A1. MODULE_PRIVATE_JWK – len pre vás</h2>
+<p class="warn">Súkromný kľúč. <b>Nevkladajte ho do Cloudflare, na GitHub ani do aplikácie.</b> Uložte si ho do správcu hesiel
+(a zálohu mimo počítača) — vkladá sa len do admin.html pri nahrávaní modulu. Ak ho stratíte, treba vygenerovať nový
+a vydať novú verziu aplikácie s novým verejným kľúčom.</p>
+<textarea id="mpriv" readonly></textarea>
+
+<h2>A2. MODULE_PUBLIC_JWK – vložte do index.html</h2>
+<p>Nahraďte ním riadok <code>const MODULE_PUBLIC_JWK = null;</code>. Najprv však nahrajte podpísaný modul na server.</p>
+<textarea id="mpub" readonly></textarea>
+
+<h2>A3. MODULE_PUBLIC_JWK – voliteľne aj do Cloudflare Workera (premenná)</h2>
+<p>Ak ju nastavíte, server odmietne modul bez správneho podpisu — ochrana pred omylom pri nahrávaní.</p>
+<textarea id="mpubw" readonly style="height:3.6rem"></textarea>
+
+<hr style="margin:2.5rem 0 1rem">
+<h2>B. Licenčné kľúče a admin token</h2>
+<p class="warn">Spustite <b>len raz</b>, pri prvom nastavení servera. Nový licenčný kľúč zneplatní licencie
+na všetkých už aktivovaných zariadeniach, kým sa znova neoveria — na bežiacom serveri ho nemeňte.</p>
+<button id="go">Vygenerovať licenčné kľúče</button>
+
+<h2>1. LICENSE_PRIVATE_JWK – secret do Cloudflare Workera</h2>
+<p class="warn">Súkromný kľúč. Nikomu ho neposielajte a nevkladajte do aplikácie. Odložte si ho na bezpečné miesto.</p>
+<textarea id="priv" readonly></textarea>
+
+<h2>2. ADMIN_TOKEN – secret do Cloudflare Workera</h2>
+<p>Náhodný token, ktorým sa prihlasujete do admin.html (uložte si ho do správcu hesiel).</p>
+<textarea id="admin" readonly style="height:2.6rem"></textarea>
+
+<h2>3. PUBLIC_JWK – vložte do index.html</h2>
+<textarea id="pub" readonly></textarea>
+
+<script>
+document.getElementById('gomod').onclick = async () => {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const priv = await crypto.subtle.exportKey('jwk', pair.privateKey);
+  const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  document.getElementById('mpriv').value = JSON.stringify({ kty: priv.kty, crv: priv.crv, x: priv.x, y: priv.y, d: priv.d });
+  document.getElementById('mpub').value =
+    "const MODULE_PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '" + pub.x + "', y: '" + pub.y + "' };";
+  document.getElementById('mpubw').value = JSON.stringify({ kty: 'EC', crv: 'P-256', x: pub.x, y: pub.y });
+};
+document.getElementById('go').onclick = async () => {
+  if (!confirm('Vygenerovať NOVÉ licenčné kľúče a admin token?\n\nNa už bežiacom serveri ich nemeňte.')) return;
+  const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const priv = await crypto.subtle.exportKey('jwk', pair.privateKey);
+  const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  document.getElementById('priv').value = JSON.stringify(priv);
+  document.getElementById('pub').value =
+    "const PUBLIC_JWK = { kty: 'EC', crv: 'P-256', x: '" + pub.x + "', y: '" + pub.y + "' };";
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  document.getElementById('admin').value =
+    Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+};
+</script>
+</body>
+</html>

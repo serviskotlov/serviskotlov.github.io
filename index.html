@@ -2,6 +2,9 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
+<!-- Bezpečnostná politika (CSP): odkiaľ smie aplikácia načítať kód, obrázky a kam smie posielať dáta.
+     Pri zmene adresy licenčného servera treba upraviť aj connect-src. 'unsafe-eval' potrebuje spúšťanie podpísaného PRO modulu. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self' https://serviskotlov-licencie-v2.gappa1972.workers.dev https://www.googleapis.com https://nominatim.openstreetmap.org; media-src 'self' blob: data:; worker-src 'self'; manifest-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d1b2a">
@@ -1039,8 +1042,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.19.2';
+const APP_VERSION = '2026.11.19.3';
 const CHANGELOG = [
+  { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
   { v:'2026.11.19.2', items:['Odolnejší import zálohy: protokol s poškodeným zoznamom dielov sa dá otvoriť'] },
   { v:'2026.11.19.1', items:['Návod sa otvára v aplikácii a má tlačidlo „Späť do aplikácie“; funguje aj tlačidlo Späť v telefóne'] },
   { v:'2026.11.19', items:['Mapa, čítačka kódov a export do Excelu sú priamo v aplikácii — nezávisia od cudzích serverov','Čítačka kódov z fotky spoľahlivejšie prečíta štítok, aj keď je nalepený nastojato'] },
