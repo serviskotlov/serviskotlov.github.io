@@ -1039,8 +1039,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.19.1';
+const APP_VERSION = '2026.11.19.2';
 const CHANGELOG = [
+  { v:'2026.11.19.2', items:['Odolnejší import zálohy: protokol s poškodeným zoznamom dielov sa dá otvoriť'] },
   { v:'2026.11.19.1', items:['Návod sa otvára v aplikácii a má tlačidlo „Späť do aplikácie“; funguje aj tlačidlo Späť v telefóne'] },
   { v:'2026.11.19', items:['Mapa, čítačka kódov a export do Excelu sú priamo v aplikácii — nezávisia od cudzích serverov','Čítačka kódov z fotky spoľahlivejšie prečíta štítok, aj keď je nalepený nastojato'] },
   { v:'2026.11.18.9', items:['PRO: synchronizácia posiela fotky zvlášť a len raz — menej dát, rýchlejšie, na druhom zariadení v plnej kvalite','Návod „Ako začať“ (Nastavenia → O aplikácii)','Mapa, čítačka kódov a export do Excelu sa načítajú z priečinka lib/, ak tam sú'] },
@@ -3509,7 +3510,7 @@ function normalizeCusts(arr){
     o.photos=(Array.isArray(o.photos)?o.photos:[]).filter(s=>typeof s==='string'&&(IMG_RE.test(s)||isRef(s)));
     o.history=objs(o.history).map(h=>({...h,id:safeId(h.id)}));
     o.invoice=objs(o.invoice).map(i=>({desc:String(i.desc==null?'':i.desc),qty:parseFloat(i.qty)||1,price:parseFloat(i.price)||0}));
-    if(o.protocols!==undefined) o.protocols=objs(o.protocols).map(p=>({...p,id:safeId(p.id)}));
+    if(o.protocols!==undefined) o.protocols=objs(o.protocols).map(p=>({...p,id:safeId(p.id),diely:objs(p.diely)}));   // poškodený zoznam dielov by znemožnil otvoriť protokol
     if(o.devices!==undefined) o.devices=objs(o.devices).map(d=>({...d,id:safeId(d.id)}));
     if(o.quotes!==undefined) o.quotes=objs(o.quotes).map(q=>({...q,id:safeId(q.id),items:objs(q.items)}));
     o.lat=parseFloat(o.lat)||null; o.lng=parseFloat(o.lng)||null;
