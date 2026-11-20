@@ -992,6 +992,14 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
 </div>
 </div>
 
+<div class="ov-bg" id="orderModal">
+<div class="modal">
+  <div class="mdrag"></div>
+  <div class="mtitle"><span>🧾 Objednávka licencie</span><button class="mclose" onclick="document.getElementById('orderModal').classList.remove('open')">✕</button></div>
+  <div id="orderBody"></div>
+</div>
+</div>
+
 <div class="ov-bg" id="licModal">
 <div class="modal">
   <div class="mdrag"></div>
@@ -1057,7 +1065,7 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.20.1';
+const APP_VERSION = '2026.11.20.2';
 const CHANGELOG = [
   { v:'2026.11.19.4', items:['Cenník licencií PRO v Nastaveniach a v okne limitu — objednávka, predĺženie a vyšší stupeň jedným ťuknutím','Upozornenie na Prehľade 30 dní pred koncom licencie'] },
   { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
@@ -1776,7 +1784,7 @@ function orderMail(t, kind){
     +eur(t.price)+' bez DPH ('+eur(t.price*(1+PRICE_VAT))+' s DPH).\n'
     +(kind==='renew'?'Ide o predĺženie licencie končiacej sa …'+(LIC.key||'').slice(-5)+'.\n':'')
     +(kind==='up'?'Ide o prechod z licencie …'+(LIC.key||'').slice(-5)+' — prosím o doplatok rozdielu.\n':'')
-    +'\nFakturačné údaje:\nFirma / meno: '+(S.firma||S.name||'')+'\nAdresa: '+(S.addr||'')+'\nIČO: '+(S.ico||'')+'\nDIČ / IČ DPH: '+(S.dic||'')+'\nE-mail: '+(S.email||'')+'\nTelefón: '+(S.phone||'')
+    +'\nFakturačné údaje:\nFirma / meno: '+(S.firma||S.name||'')+'\nAdresa: '+(S.addr||'')+'\nIČO: '+(S.ico||'')+'\nDIČ / IČ DPH: '+[S.dic,S.icdph].filter(Boolean).join(' / ')+'\nE-mail: '+(S.email||'')+'\nTelefón: '+(S.phone||'')
     +'\n\nOboznámil(a) som sa s obchodnými podmienkami: '+new URL('obchodne-podmienky.html',location.href).href+'\n';
   return 'mailto:'+LIC_SELLER.orderEmail+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
 }
@@ -1790,8 +1798,8 @@ function pricingHTML(){
     const tl=t.limit||Infinity, isCur=cur===t, lower=LIC.valid && tl<curLim;
     const kind=isCur?'renew':(LIC.valid?'up':'new');
     const tag=isCur?'<span class="prtag cur">tvoj stupeň</span>':(!LIC.valid && t===fit?'<span class="prtag">odporúčame</span>':'');
-    // e-mail sa poskladá až pri ťuknutí — s aktuálnymi fakturačnými údajmi z Nastavení
-    const btn=lower?'':`<a class="btn ${isCur&&!soon?'btn-s':'btn-p'} prbtn" href="mailto:${esc(LIC_SELLER.orderEmail)}" onclick="this.href=orderMail(PRICE_TIERS[${PRICE_TIERS.indexOf(t)}],'${kind}')">${isCur?'Predĺžiť':(LIC.valid?'Prejsť vyššie':'Objednať')}</a>`;
+    // objednávkový formulár v aplikácii (fakturačné údaje sa doplnia z Nastavení)
+    const btn=lower?'':`<button class="btn ${isCur&&!soon?'btn-s':'btn-p'} prbtn" onclick="openOrder(${PRICE_TIERS.indexOf(t)},'${kind}')">${isCur?'Predĺžiť':(LIC.valid?'Prejsť vyššie':'Objednať')}</button>`;
     return `<div class="prrow${isCur?' cur':''}${lower?' low':''}">
       <div class="prnm">${esc(t.name)} ${tag}<div class="prlim">${t.limit?'do '+t.limit+' zákazníkov':'neobmedzený počet zákazníkov'}</div></div>
       <div class="prpr"><b>${eur(t.price)}</b><span>bez DPH / rok</span><span>${eur(t.price*(1+PRICE_VAT))} s DPH</span></div>
@@ -1801,7 +1809,7 @@ function pricingHTML(){
     ${rows}
     <div class="prnote">Licencia platí 12 mesiacov od vydania kľúča, na ${PRICE_DEVICES} zariadenia (napr. telefón a počítač). Všetky stupne majú všetky funkcie PRO, líšia sa len počtom zákazníkov.
     ${LIC.valid?' Pri prechode na vyšší stupeň doplácaš len pomernú časť rozdielu.':' Bezplatne do '+FREE_LIMIT+' zákazníkov.'}
-    Platba faktúrou, kľúč príde e-mailom po úhrade. <a href="obchodne-podmienky.html" style="color:var(--accent)">Obchodné podmienky</a></div>
+    Platba faktúrou. Po úhrade sa licencia v aplikácii aktivuje sama. <a href="obchodne-podmienky.html" style="color:var(--accent)">Obchodné podmienky</a></div>
   </div>`;
 }
 
@@ -2125,6 +2133,24 @@ const SKLicense = (() => {
     limit: payload && payload.limit > 0 ? payload.limit : 0, // stupeň licencie: max. počet zákazníkov (0 = neobmedzene)
   });
 
+  // ── objednávky licencie (server ich uloží; po úhrade ich správca vybaví v admin.html)
+  const ORDER_MSG = {
+    terms_required: 'Potvrď súhlas s obchodnými podmienkami.',
+    missing_name: 'Vyplň meno alebo názov firmy.',
+    missing_addr: 'Vyplň fakturačnú adresu.',
+    bad_email: 'Skontroluj e-mail — naň príde faktúra.',
+    bad_tier: 'Tento stupeň sa nedá objednať.',
+    too_many_orders: 'Objednávok je teraz priveľa. Skús to o hodinu alebo objednaj e-mailom.',
+  };
+  api.placeOrder = async function (data) {
+    const body = Object.assign({}, data);
+    if (body.kind !== 'new') { body.key = localStorage.getItem(LS.key) || ''; body.deviceId = deviceId(); }
+    const r = await call('/order', body);
+    if (!r.ok) return { ok: false, error: r.error, message: ORDER_MSG[r.error] || MESSAGES[r.error] || ('Objednávku sa nepodarilo odoslať (' + r.error + ').') };
+    return { ok: true, order: r.order };
+  };
+  api.orderStatus = (no, token) => call('/order/status', { no, token });
+
   api.refresh = refresh;
   return api;
 })();
@@ -2149,6 +2175,7 @@ async function checkLicense(){
   SKLicense.onProLoaded=afterProLoaded;
   await SKLicense.init();
   syncLic(); renderLicUI(); applyProUI();
+  setTimeout(()=>checkOrders(false), 1500);
   // návrat z Google prihlásenia bez PRO modulu: token nenechávame v adrese
   if(!SKLicense.proReady() && location.hash.indexOf('access_token')>-1) history.replaceState(null,'',location.pathname);
   return LIC;
@@ -2316,6 +2343,7 @@ function renderLicUI(){
          Platnosť: ${LIC.exp?'do '+fmtTs(LIC.exp)+(left!==null&&left<=45?' <span style="color:var(--warn)">· zostáva '+left+' dní</span>':''):'bez obmedzenia'}<br>
          Bez internetu funguje do: ${fmtTs(LIC.until)}
          ${SKLicense.proReady()?'':'<br><span style="color:var(--warn)">Funkcie PRO sa ešte nestiahli — pripoj sa na internet.</span>'}</div>`;
+      h+=ordersHTML();
       h+=`<details class="prfold"${left!==null&&left<=45?' open':''}><summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:10px">💶 Cenník, predĺženie a vyšší stupeň</summary>${pricingHTML()}</details>`;
     } else {
       const pct=Math.min(100,used/FREE_LIMIT*100);
@@ -2329,6 +2357,7 @@ function renderLicUI(){
            Verzia PRO: ${PRO_FEATURES.map(esc).join(' · ')}<br>
            Objednávka: ${esc(LIC_SELLER.email)} · ${esc(LIC_SELLER.phone)}
            ${hasDemo?'<br>Ukážkoví zákazníci sa do limitu nepočítajú.':''}</div>
+         ${ordersHTML()}
          ${pricingHTML()}`;
     }
     box.innerHTML=h;
@@ -2355,6 +2384,120 @@ function renderLicUI(){
     ban.innerHTML=parts.join('');
   }
 }
+// ═══ OBJEDNÁVKA LICENCIE ═══
+// Objednávka sa uloží na licenčnom serveri. Po úhrade faktúry ju predajca vybaví
+// a aplikácia si kľúč stiahne a aktivuje sama (kontrola pri otvorení a každých 10 minút).
+const ORD_LS='sk_lic_orders';
+function loadOrders(){ try{ const a=JSON.parse(localStorage.getItem(ORD_LS)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveOrders(a){ try{ localStorage.setItem(ORD_LS, JSON.stringify(a.slice(-10))); }catch(e){} }
+let orderCtx=null;
+function openOrder(idx, kind){
+  const t=PRICE_TIERS[idx]; if(!t) return;
+  orderCtx={t, kind};
+  const S=settings||{};
+  const what=kind==='renew'?'Predĺženie licencie o 12 mesiacov':(kind==='up'?'Prechod na vyšší stupeň (doplácaš pomernú časť rozdielu — presnú sumu uvedieme na faktúre)':'Nová licencia na 12 mesiacov');
+  const f=(id,lab,val,ph,req,type)=>`<div class="fg"><label class="fl">${lab}${req?' *':''}</label><input class="fi" id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}"${type?' type="'+type+'"':''} autocomplete="off"></div>`;
+  document.getElementById('orderBody').innerHTML=`
+    <div class="prbox" style="margin-bottom:12px">
+      <div class="prnm" style="font-size:15px">${esc(t.name)} <div class="prlim">${t.limit?'do '+t.limit+' zákazníkov':'neobmedzený počet zákazníkov'} · ${PRICE_DEVICES} zariadenia</div></div>
+      <div style="margin-top:6px;font-size:13px"><b>${eur(t.price)}</b> bez DPH · ${eur(t.price*(1+PRICE_VAT))} s DPH</div>
+      <div class="prlim" style="margin-top:4px">${esc(what)}</div>
+    </div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:8px">Fakturačné údaje (doplnené z Nastavení, môžeš ich upraviť):</div>
+    ${f('ordFirma','Firma / meno',S.firma||S.name,'Názov firmy alebo meno',true)}
+    ${f('ordAddr','Fakturačná adresa',S.addr,'Ulica 1, 000 00 Mesto',true)}
+    <div class="frow">${f('ordIco','IČO',S.ico,'')}${f('ordDic','DIČ / IČ DPH',[S.dic,S.icdph].filter(Boolean).join(' / '),'')}</div>
+    ${f('ordEmail','E-mail na faktúru',S.email,'servis@firma.sk',true,'email')}
+    ${f('ordPhone','Telefón',S.phone,'')}
+    ${f('ordNote','Poznámka',  '', 'nepovinné')}
+    <label class="chkline" style="margin:10px 0"><input type="checkbox" id="ordTerms"> Súhlasím s <a href="obchodne-podmienky.html" target="_blank" style="color:var(--accent)">obchodnými podmienkami</a> *</label>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px">Faktúru pošleme e-mailom. Po jej úhrade sa licencia v tejto aplikácii aktivuje sama — stačí ju otvoriť s internetom.</div>
+    <button class="btn btn-p" id="ordSend" onclick="sendOrder()">📨 Odoslať objednávku</button>
+    <a class="btn btn-s" style="margin-top:6px;display:block;text-align:center" href="#" onclick="this.href=orderMail(orderCtx.t,orderCtx.kind)">Radšej objednať e-mailom</a>`;
+  closeAllModals();
+  document.getElementById('orderModal').classList.add('open');
+}
+async function sendOrder(){
+  if(!orderCtx) return;
+  const v=id=>(document.getElementById(id).value||'').trim();
+  const data={ kind:orderCtx.kind, tier:orderCtx.t.limit, firma:v('ordFirma'), addr:v('ordAddr'), ico:v('ordIco'), dic:v('ordDic'),
+    email:v('ordEmail'), phone:v('ordPhone'), note:v('ordNote'), terms:document.getElementById('ordTerms').checked };
+  if(!data.firma) return alert('Vyplň firmu alebo meno.');
+  if(!data.addr) return alert('Vyplň fakturačnú adresu.');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return alert('Skontroluj e-mail — naň príde faktúra.');
+  if(!data.terms) return alert('Potvrď súhlas s obchodnými podmienkami.');
+  const btn=document.getElementById('ordSend'); btn.disabled=true; btn.textContent='⏳ Odosielam…';
+  const r=await SKLicense.placeOrder(data);
+  btn.disabled=false; btn.textContent='📨 Odoslať objednávku';
+  if(!r.ok){
+    if(r.error==='network' && confirm('Server nie je dostupný.\nPoslať objednávku e-mailom?')){ location.href=orderMail(orderCtx.t,orderCtx.kind); }
+    else if(r.error!=='network') alert('❌ '+r.message);
+    return;
+  }
+  const o=r.order;
+  const list=loadOrders().filter(x=>x.no!==o.no);
+  list.push({ no:o.no, token:o.token, kind:o.kind, name:o.name, price:o.price, email:data.email, createdAt:o.createdAt, status:'new' });
+  saveOrders(list);
+  document.getElementById('orderBody').innerHTML=`
+    <div style="font-size:15px;font-weight:600;color:var(--accent3);margin-bottom:8px">✅ Objednávka č. ${esc(o.no)} je prijatá</div>
+    <div style="font-size:13px;line-height:1.7">
+      ${esc(o.name)} · ${eur(o.price)} bez DPH (${eur(o.price*(1+PRICE_VAT))} s DPH)<br>
+      Faktúru pošleme na <b>${esc(data.email)}</b>, variabilný symbol bude <b>${esc(o.no)}</b>.<br>
+      Po úhrade sa licencia v tejto aplikácii <b>aktivuje sama</b> — stačí ju otvoriť s internetom. Nič netreba prepisovať.
+    </div>
+    <button class="btn btn-p" style="margin-top:14px" onclick="document.getElementById('orderModal').classList.remove('open')">Hotovo</button>`;
+  renderLicUI();
+}
+function ordersHTML(){
+  const list=loadOrders(); if(!list.length) return '';
+  return list.map(o=>{
+    const st=o.status==='cancelled'?'<span style="color:var(--danger)">zrušená</span>':'<span style="color:var(--warn)">čaká na úhradu faktúry</span>';
+    return `<div style="border:1px dashed var(--border);border-radius:8px;padding:8px 10px;margin:10px 0;font-family:var(--mono);font-size:11px;line-height:1.6">
+      ⏳ Objednávka č. <b>${esc(o.no)}</b> · ${esc(o.name)} · ${eur(o.price)} bez DPH — ${st}<br>
+      ${o.status==='cancelled'?'Ak ide o omyl, napíš na '+esc(LIC_SELLER.orderEmail)+'.':'Po úhrade (VS '+esc(o.no)+') sa licencia aktivuje sama.'}
+      <div style="margin-top:6px"><a href="#" style="color:var(--accent)" onclick="event.preventDefault();checkOrders(true)">🔄 Skontrolovať</a>
+      · <a href="#" style="color:var(--muted)" onclick="event.preventDefault();dropOrder('${esc(o.no)}')">Skryť</a></div></div>`;
+  }).join('');
+}
+function dropOrder(no){
+  if(!confirm('Skryť objednávku č. '+no+'?\nAk ju už zaplatíš, licenciu dostaneš aj e-mailom.')) return;
+  saveOrders(loadOrders().filter(o=>o.no!==no)); renderLicUI();
+}
+let ordChecking=false, ordLast=0;
+async function checkOrders(force){
+  const list=loadOrders().filter(o=>o.status==='new');
+  if(!list.length || ordChecking) return;
+  if(!force && Date.now()-ordLast<10*60*1000) return;
+  ordChecking=true; ordLast=Date.now();
+  let netFail=false;
+  try{
+    for(const o of list){
+      const r=await SKLicense.orderStatus(o.no, o.token);
+      if(!r.ok){ if(r.error==='order_not_found'){ saveOrders(loadOrders().filter(x=>x.no!==o.no)); } else netFail=true; continue; }
+      const st=r.order;
+      if(st.status==='cancelled'){ saveOrders(loadOrders().map(x=>x.no===o.no?Object.assign(x,{status:'cancelled'}):x)); continue; }
+      if(st.status!=='done' || !st.key) continue;
+      let res;
+      if(LIC.hasKey && String(LIC.key||'').toUpperCase()===st.key){ await SKLicense.refresh(); res={ok:true}; }
+      else res=await SKLicense.activate(st.key);
+      if(res.ok){
+        saveOrders(loadOrders().filter(x=>x.no!==o.no));
+        syncLic(); renderLicUI(); applyProUI();
+        showToast(o.kind==='new'?'✅ Licencia z objednávky '+o.no+' je aktivovaná':'✅ Licencia je predĺžená / rozšírená');
+      } else {
+        // kľúč je vydaný, ale aktivácia neprešla (napr. plný počet zariadení) — ukážeme ho, nech sa nestratí
+        saveOrders(loadOrders().filter(x=>x.no!==o.no));
+        alert('Objednávka č. '+o.no+' je vybavená, ale licenciu sa nepodarilo aktivovať:\n'+res.message+'\n\nTvoj licenčný kľúč:\n'+st.key+'\n\nZadaj ho v Nastaveniach → Licencia.');
+        try{ document.getElementById('licInput').value=st.key; }catch(e){}
+      }
+    }
+  } finally { ordChecking=false; }
+  if(force) showToast(netFail?'Server nie je dostupný':'Objednávky skontrolované', netFail?'var(--danger)':undefined);
+  renderLicUI();
+}
+setInterval(()=>{ if(!document.hidden) checkOrders(false); }, 60*1000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkOrders(false); });
+
 async function activateLicense(){
   const key=(document.getElementById('licInput').value||'').trim();
   if(!key){ alert('Vlož licenčný kľúč.'); return; }

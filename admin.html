@@ -34,6 +34,12 @@
   summary { cursor: pointer; font-size: .88rem; color: #1f4e79; }
   .toolbar { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .7rem; }
   .toolbar input { flex: 1; min-width: 12rem; }
+  .order { border: 2px solid #e0a800; border-radius: 8px; padding: .8rem 1rem; margin-bottom: .7rem; background: #fffbea; }
+  .order.done { border: 1px solid #d5dbe3; background: #fff; }
+  .order.cancelled { border: 1px solid #d5dbe3; background: #f6f6f6; color: #777; }
+  .order pre { white-space: pre-wrap; font: .88rem/1.45 system-ui, sans-serif; margin: .4rem 0; }
+  #ordcount { display: inline-block; min-width: 1.4rem; text-align: center; font-size: .8rem; padding: .05rem .45rem; border-radius: 99px; background: #c8102e; color: #fff; margin-left: .4rem; }
+  #ordcount:empty { display: none; }
 </style>
 </head>
 <body>
@@ -44,6 +50,14 @@
   <label>Adresa servera <input id="server" size="36" placeholder="https://....workers.dev"></label>
   <label>Admin token <input id="token" type="password" size="28"></label>
   <button id="connect" class="primary">Načítať licencie</button>
+</fieldset>
+
+<fieldset>
+  <legend>Objednávky z aplikácie <span id="ordcount"></span></legend>
+  <div class="meta">Postup: vystav faktúru v KROS-e (variabilný symbol = číslo objednávky) → po úhrade klikni <b>Zaplatené – vydať licenciu</b>.
+    Aplikácia zákazníka si licenciu stiahne a aktivuje sama; kľúč netreba posielať.</div>
+  <div id="orders" class="meta">Načítaj licencie (tlačidlo hore).</div>
+  <details id="ordold"><summary>Vybavené a zrušené objednávky</summary><div id="ordersold"></div></details>
 </fieldset>
 
 <fieldset>
@@ -97,12 +111,20 @@ const isoDay = (ts) => { if (!ts) return ''; const d = new Date(ts); const p = (
 const ERRORS = {
   unauthorized: 'Nesprávny admin token.',
   too_many_attempts: 'Príliš veľa nesprávnych pokusov z tejto adresy. Skús to znova o 15 minút.',
+  order_not_open: 'Objednávka už bola vybavená alebo zrušená.',
+  order_not_found: 'Objednávka neexistuje.',
+  invalid_key: 'Licencia k tejto objednávke neexistuje.',
   signature_required: 'Server prijíma len podpísaný modul — vlož podpisový kľúč modulu.',
   bad_signature: 'Podpis modulu nesedí s kľúčom nastaveným na serveri (MODULE_PUBLIC_JWK). Použil si správny podpisový kľúč?',
   module_too_large: 'Modul je príliš veľký.',
 };
 
 let licenses = [];
+let orders = [];
+const KIND = { new: 'nová licencia', renew: 'predĺženie', up: 'prechod na vyšší stupeň' };
+const VAT = 0.23;
+const eur = (n) => (Math.round(n * 100) / 100).toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const fmtT = (ts) => ts ? new Date(ts).toLocaleString('sk-SK', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
 // Podpíše kód modulu súkromným kľúčom (ECDSA P-256 / SHA-256) a podpis si hneď overí.
 async function signModule(code, jwkText) {
@@ -250,6 +272,66 @@ function card(l) {
   return c;
 }
 
+function invoiceText(o) {
+  const t = TIER_NAME[o.tier] || ('do ' + o.tier);
+  return 'Objednávka č. ' + o.no + ' (' + fmtT(o.created_at) + ')\n' +
+    'Odberateľ: ' + o.firma + '\n' + 'Adresa: ' + o.addr + '\n' +
+    (o.ico ? 'IČO: ' + o.ico + '\n' : '') + (o.dic ? 'DIČ / IČ DPH: ' + o.dic + '\n' : '') +
+    'E-mail: ' + o.email + (o.phone ? ' · tel. ' + o.phone : '') + '\n' +
+    'Položka: Licencia ServisKotlov ' + t + ' – ' + KIND[o.kind] + ', 12 mesiacov, 2 zariadenia\n' +
+    'Cena: ' + eur(o.price) + ' bez DPH · DPH 23 % ' + eur(o.price * VAT) + ' · spolu ' + eur(o.price * (1 + VAT)) + '\n' +
+    'Variabilný symbol: ' + o.no +
+    (o.kind === 'up' ? '\nPOZOR: prechod vyššie – fakturuj pomernú časť rozdielu do konca platnosti licencie …' + String(o.lic_key || '').slice(-5) : '') +
+    (o.note ? '\nPoznámka zákazníka: ' + o.note : '');
+}
+
+async function orderAction(no, action, question) {
+  if (question && !confirm(question)) return;
+  try {
+    const r = await api('POST', '/admin/orders/update', { no, action });
+    await load();
+    say(action === 'fulfill' ? 'Objednávka ' + no + ' vybavená, licencia ' + r.key + '. Aplikácia zákazníka ju aktivuje sama.' : 'Hotovo.');
+  } catch (e) { say(e.message); }
+}
+
+function orderCard(o) {
+  const c = el('div', { className: 'order' + (o.status === 'done' ? ' done' : o.status === 'cancelled' ? ' cancelled' : '') });
+  c.append(el('div', {}, [
+    el('span', { className: 'who', textContent: 'Č. ' + o.no + ' · ' + o.firma }),
+    el('span', { className: 'tag tier', textContent: (TIER_NAME[o.tier] || o.tier) + ' · ' + KIND[o.kind] }),
+    el('span', { className: 'tag' + (o.status === 'cancelled' ? ' bad' : ''), textContent:
+      o.status === 'new' ? 'čaká na úhradu' : o.status === 'done' ? 'vybavená ' + fmt(o.done_at) : o.status === 'cancelled' ? 'zrušená' : o.status }),
+  ]));
+  c.append(el('pre', { textContent: invoiceText(o) + (o.result_key ? '\nLicencia: ' + o.result_key : '') }));
+  const a = el('div', { className: 'actions' });
+  a.append(el('button', { textContent: '📋 Kopírovať údaje na faktúru', onclick: () =>
+    navigator.clipboard.writeText(invoiceText(o)).then(() => say('Údaje skopírované.')) }));
+  if (o.status === 'new') {
+    a.append(el('button', { className: 'primary', textContent: '✅ Zaplatené – vydať licenciu', onclick: () =>
+      orderAction(o.no, 'fulfill', 'Objednávka č. ' + o.no + ' (' + o.firma + ') je zaplatená?\n\n' +
+        (o.kind === 'new' ? 'Vytvorí sa nová licencia ' + (TIER_NAME[o.tier] || o.tier) + ' na 12 mesiacov.'
+          : o.kind === 'renew' ? 'Licencia …' + String(o.lic_key || '').slice(-5) + ' sa predĺži o 12 mesiacov.'
+          : 'Licencia …' + String(o.lic_key || '').slice(-5) + ' sa prepne na ' + (TIER_NAME[o.tier] || o.tier) + '.')) }));
+    a.append(el('button', { textContent: 'Zrušiť objednávku', onclick: () =>
+      orderAction(o.no, 'cancel', 'Zrušiť objednávku č. ' + o.no + '?\nZákazník uvidí v aplikácii, že je zrušená.') }));
+  }
+  if (o.status === 'cancelled') a.append(el('button', { textContent: 'Obnoviť', onclick: () => orderAction(o.no, 'reopen') }));
+  if (o.status === 'done' && o.result_key) a.append(el('button', { textContent: 'Kopírovať kľúč', onclick: () =>
+    navigator.clipboard.writeText(o.result_key).then(() => say('Kľúč skopírovaný.')) }));
+  c.append(a);
+  return c;
+}
+
+function renderOrders() {
+  const open = orders.filter((o) => o.status === 'new' || o.status === 'processing');
+  const old = orders.filter((o) => !(o.status === 'new' || o.status === 'processing'));
+  $('ordcount').textContent = open.length ? String(open.length) : '';
+  if (open.length) $('orders').replaceChildren(...open.map(orderCard));
+  else $('orders').replaceChildren(el('div', { textContent: 'Žiadne nové objednávky.' }));
+  $('ordersold').replaceChildren(...old.map(orderCard));
+  $('ordold').style.display = old.length ? '' : 'none';
+}
+
 function render() {
   const q = $('filter').value.trim().toLowerCase();
   const shown = licenses.filter((l) => !q ||
@@ -267,6 +349,8 @@ async function load() {
   try {
     licenses = (await api('GET', '/admin/licenses')).licenses;
     render();
+    try { orders = (await api('GET', '/admin/orders')).orders; renderOrders(); }
+    catch (e) { $('orders').textContent = 'Objednávky sa nepodarilo načítať (je nasadená nová verzia servera?): ' + e.message; }
     say('Načítané.');
   } catch (e) { say(e.message || 'Server nie je dostupný.'); }
 }
