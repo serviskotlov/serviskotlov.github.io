@@ -1057,7 +1057,7 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.19.4';
+const APP_VERSION = '2026.11.20.1';
 const CHANGELOG = [
   { v:'2026.11.19.4', items:['Cenník licencií PRO v Nastaveniach a v okne limitu — objednávka, predĺženie a vyšší stupeň jedným ťuknutím','Upozornenie na Prehľade 30 dní pred koncom licencie'] },
   { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
@@ -1755,7 +1755,7 @@ function saveSett(){
 // Kód platených funkcií NIE JE v tomto súbore — server ho vydá až po aktivácii.
 // ═══════════════════════════════════════════════
 const FREE_LIMIT = 10;
-const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'adrian.kramer@seznam.cz', phone:'0905 702 876' };
+const LIC_SELLER = { firma:'EGMONT s.r.o.', email:'info@serviskotlovpro.sk', orderEmail:'fakturacia@serviskotlovpro.sk', phone:'0905 702 876' };
 const PRO_FEATURES = ['Viac zákazníkov (100, 400 alebo neobmedzene)','Servisné protokoly — tlač, PDF, e-mail','Cenové ponuky a kalkulácie',
   'Záloha na Google Drive a do priečinka','Export do Excelu, mapa zákazníkov, hromadné GPS'];
 let LIC = { valid:false, limit:FREE_LIMIT, reason:'' };
@@ -1778,7 +1778,7 @@ function orderMail(t, kind){
     +(kind==='up'?'Ide o prechod z licencie …'+(LIC.key||'').slice(-5)+' — prosím o doplatok rozdielu.\n':'')
     +'\nFakturačné údaje:\nFirma / meno: '+(S.firma||S.name||'')+'\nAdresa: '+(S.addr||'')+'\nIČO: '+(S.ico||'')+'\nDIČ / IČ DPH: '+(S.dic||'')+'\nE-mail: '+(S.email||'')+'\nTelefón: '+(S.phone||'')
     +'\n\nOboznámil(a) som sa s obchodnými podmienkami: '+new URL('obchodne-podmienky.html',location.href).href+'\n';
-  return 'mailto:'+LIC_SELLER.email+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+  return 'mailto:'+LIC_SELLER.orderEmail+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
 }
 function pricingHTML(){
   const used=countedCusts();
@@ -1791,7 +1791,7 @@ function pricingHTML(){
     const kind=isCur?'renew':(LIC.valid?'up':'new');
     const tag=isCur?'<span class="prtag cur">tvoj stupeň</span>':(!LIC.valid && t===fit?'<span class="prtag">odporúčame</span>':'');
     // e-mail sa poskladá až pri ťuknutí — s aktuálnymi fakturačnými údajmi z Nastavení
-    const btn=lower?'':`<a class="btn ${isCur&&!soon?'btn-s':'btn-p'} prbtn" href="mailto:${esc(LIC_SELLER.email)}" onclick="this.href=orderMail(PRICE_TIERS[${PRICE_TIERS.indexOf(t)}],'${kind}')">${isCur?'Predĺžiť':(LIC.valid?'Prejsť vyššie':'Objednať')}</a>`;
+    const btn=lower?'':`<a class="btn ${isCur&&!soon?'btn-s':'btn-p'} prbtn" href="mailto:${esc(LIC_SELLER.orderEmail)}" onclick="this.href=orderMail(PRICE_TIERS[${PRICE_TIERS.indexOf(t)}],'${kind}')">${isCur?'Predĺžiť':(LIC.valid?'Prejsť vyššie':'Objednať')}</a>`;
     return `<div class="prrow${isCur?' cur':''}${lower?' low':''}">
       <div class="prnm">${esc(t.name)} ${tag}<div class="prlim">${t.limit?'do '+t.limit+' zákazníkov':'neobmedzený počet zákazníkov'}</div></div>
       <div class="prpr"><b>${eur(t.price)}</b><span>bez DPH / rok</span><span>${eur(t.price*(1+PRICE_VAT))} s DPH</span></div>
