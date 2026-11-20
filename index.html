@@ -282,6 +282,7 @@ select option{background:var(--surf);color:var(--text);}
 .chk-b.on-bad{background:rgba(239,35,60,.18);border-color:var(--danger);color:var(--danger);font-weight:700;}
 .chk-b.on-na{background:var(--surf3);border-color:var(--border2);color:var(--text);font-weight:700;}
 .chk-note{width:100%;background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-family:var(--mono);font-size:11px;outline:none;margin-top:4px;}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
 .mer-row{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:5px;align-items:center;margin-bottom:5px;}
 .mer-row .ml{font-family:var(--mono);font-size:10.5px;color:var(--muted);line-height:1.15;}
 .mer-row input{background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 5px;font-family:var(--mono);font-size:12px;text-align:center;outline:none;width:100%;}
@@ -882,7 +883,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div id="chkList"></div>
 
   <div class="stitle">🔥 Analýza spalín</div>
-  <div class="mer-head"><span>Veličina</span><span>Pred</span><span>Po min.</span><span>Po max.</span></div>
+  <div class="mer-head" style="grid-template-columns:1.25fr 1fr 1fr"><span>Veličina</span><span>Po min.</span><span>Po max.</span></div>
   <div id="merRows"></div>
   <div class="frow" style="margin-top:8px">
     <div class="fg"><label class="fl">Tlak vody (bar)</label><input class="fi" id="pTlakSys" inputmode="decimal"></div>
@@ -1065,7 +1066,7 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.20.2';
+const APP_VERSION = '2026.11.20.3';
 const CHANGELOG = [
   { v:'2026.11.19.4', items:['Cenník licencií PRO v Nastaveniach a v okne limitu — objednávka, predĺženie a vyšší stupeň jedným ťuknutím','Upozornenie na Prehľade 30 dní pred koncom licencie'] },
   { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
