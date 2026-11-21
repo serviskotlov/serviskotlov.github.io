@@ -34,7 +34,8 @@
 <title>ServisKotlov PRO</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ServisKotlov">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -1074,8 +1075,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.21.2';
+const APP_VERSION = '2026.11.21.3';
 const CHANGELOG = [
+  { v:'2026.11.21.3', items:['Ikona aplikácie aj pre odkaz na ploche v počítači a ostrejšia ikona na iPhone'] },
   { v:'2026.11.21.2', items:['Zákazníci: prepínač triedenia — podľa termínu prehliadky, naposledy pridaní / upravení, alebo podľa mena'] },
   { v:'2026.11.21.1', items:['Zoznam zákazníkov má v telefóne aj v počítači rovnaké poradie: najprv po termíne, potom podľa najbližšieho termínu prehliadky'] },
   { v:'2026.11.21', items:['PRO: analýza spalín plynového kotla — hodnoty po servise pri min. a max. výkone; tlak plynu statický a dynamický jedno políčko','PRO: poznámka ku každému úkonu tlačidlom ✎ (aj pri OK a N/A), vytlačí sa v protokole','PDF protokolu z iPhonu: text sa už nezväčšuje a podpisy ostávajú pri bode 8'] },

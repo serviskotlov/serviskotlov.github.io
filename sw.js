@@ -2,13 +2,13 @@
 // Vďaka nemu sa aplikácia otvorí aj bez internetu (kotolňa, pivnica) a knižnice z internetu sa držia v zariadení.
 // Dáta zákazníkov sa tu neukladajú — tie sú v úložisku aplikácie.
 // Pri zmene tohto súboru zvýš číslo verzie.
-const VERSION = 'sk-v10';
+const VERSION = 'sk-v11';
 const SHELL = VERSION + '-shell';
 const LIBS = 'sk-libs-v1';
 const LOCAL = 'sk-local-v1'; // knižnica a písma na PDF z priečinka lib/ (veľké, menia sa zriedka)
 
 // súbory aplikácie (relatívne k umiestneniu tohto súboru)
-const CORE = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CORE = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.ico', 'apple-touch-icon.png'];
 // knižnice a písma, ktoré aplikácia načítava z internetu
 const LIB_URLS = [
   'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js',
