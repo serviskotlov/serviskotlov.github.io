@@ -1066,8 +1066,11 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.20.3';
+const APP_VERSION = '2026.11.21';
 const CHANGELOG = [
+  { v:'2026.11.21', items:['PRO: analýza spalín plynového kotla — hodnoty po servise pri min. a max. výkone; tlak plynu statický a dynamický jedno políčko','PRO: poznámka ku každému úkonu tlačidlom ✎ (aj pri OK a N/A), vytlačí sa v protokole','PDF protokolu z iPhonu: text sa už nezväčšuje a podpisy ostávajú pri bode 8'] },
+  { v:'2026.11.20.2', items:['Objednávka licencie priamo v aplikácii (Nastavenia → Licencia): fakturačné údaje sa doplnia samé, po úhrade faktúry sa licencia aktivuje sama — kľúč netreba prepisovať'] },
+  { v:'2026.11.20.1', items:['Nový kontakt: info@serviskotlovpro.sk, objednávky a faktúry fakturacia@serviskotlovpro.sk'] },
   { v:'2026.11.19.4', items:['Cenník licencií PRO v Nastaveniach a v okne limitu — objednávka, predĺženie a vyšší stupeň jedným ťuknutím','Upozornenie na Prehľade 30 dní pred koncom licencie'] },
   { v:'2026.11.19.3', items:['Bezpečnostná politika prehliadača (CSP): aplikácia smie načítať kód a posielať dáta len na povolené adresy'] },
   { v:'2026.11.19.2', items:['Odolnejší import zálohy: protokol s poškodeným zoznamom dielov sa dá otvoriť'] },
