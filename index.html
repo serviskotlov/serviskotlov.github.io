@@ -25,6 +25,7 @@
     pref=(p==='light'||p==='auto')?p:'dark';
     try{ localStorage.setItem('sk2_theme',pref); }catch(e){}
     apply();
+    try{ if(window.settingsSums) settingsSums(); }catch(e){}
     var box=document.getElementById('themeChips');
     if(box) [].forEach.call(box.querySelectorAll('.chip'),function(c){ c.classList.toggle('active',c.getAttribute('data-t')===pref); });
   };
@@ -388,6 +389,19 @@ input[type="date"]{color-scheme:dark;}
 input[type="file"]{display:none;}
 </style>
 <style id="skFoldCss">
+.sgrp{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;scroll-margin-top:120px}
+.sgrp>summary{list-style:none;display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.sgrp>summary::-webkit-details-marker{display:none}
+.sgrp .sg-ic{font-size:22px;width:28px;text-align:center;flex:none}
+.sgrp .sg-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sgrp .sg-t{font-weight:600;font-size:15px}
+.sgrp .sg-s{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sgrp .sg-s.warn{color:var(--warn)} .sgrp .sg-s.bad{color:var(--danger)} .sgrp .sg-s.ok{color:var(--accent3)}
+.sgrp .sg-arr{flex:none;font-size:20px;color:var(--muted);transition:transform .15s}
+.sgrp[open]>summary .sg-arr{transform:rotate(90deg)}
+.sgrp[open]>summary{border-bottom:1px solid var(--border)}
+.sgrp .sg-body{padding:4px 14px 14px}
+.sgrp .sg-body>.stitle:first-child,.sgrp .sg-body>details.sk-fold:first-child>summary{margin-top:8px}
 details.sk-fold>summary{list-style:none;cursor:pointer;user-select:none;-webkit-user-select:none;padding:6px 0;margin:8px 0 2px}
 details.sk-fold>summary::-webkit-details-marker{display:none}
 details.sk-fold>summary .sk-arr{order:3;flex:none;font-size:14px;line-height:1;color:var(--muted);transition:transform .15s}
@@ -492,12 +506,15 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
 
 <!-- PAGE: SETTINGS -->
 <div class="pg" id="page-settings">
-  <div class="stitle">🔑 Licencia</div>
+  <details class="sgrp" id="grpLic"><summary><span class="sg-ic">🔑</span><span class="sg-tx"><span class="sg-t">Licencia</span><span class="sg-s" id="grpLicSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
   <div id="licBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
   <div class="fg"><label class="fl">Licenčný kľúč</label><input class="fi" id="licInput" placeholder="SKP-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-family:var(--mono);font-size:13px"></div>
   <button class="btn btn-p" onclick="activateLicense()">🔓 Aktivovať licenciu</button>
   <button class="btn btn-s" id="licRemoveBtn" style="margin-top:6px;display:none" onclick="removeLicense()">Odstrániť licenciu z tohto zariadenia</button>
-  <button class="btn btn-o" id="demoRemoveBtn" style="margin-top:6px;display:none" onclick="removeDemo()">🧪 Odstrániť ukážkových zákazníkov</button>
+  </div></details>
+  <details class="sgrp" id="grpFirm"><summary><span class="sg-ic">🏢</span><span class="sg-tx"><span class="sg-t">Firma a technik</span><span class="sg-s" id="grpFirmSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
   <div class="stitle">👤 Technik</div>
   <div class="fg"><label class="fl">Meno</label><input class="fi" id="sName" placeholder="Ján Novák"></div>
   <div class="fg"><label class="fl">Telefón</label><input class="fi" id="sPhone" placeholder="+421 911 ..."></div>
@@ -536,6 +553,10 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
     <input type="file" id="stampFile" accept="image/*" style="display:none" onchange="uploadStamp(event)">
     <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Odfoť alebo naskenuj pečiatku na bielom papieri. Biele pozadie sa odstráni automaticky (v náhľade je za pečiatkou šachovnica).</div>
   </div>
+  <button class="btn btn-p" style="margin-top:12px" onclick="saveSettings()">💾 Uložiť nastavenia</button>
+  </div></details>
+  <details class="sgrp" id="grpPref"><summary><span class="sg-ic">⚙️</span><span class="sg-tx"><span class="sg-t">Predvoľby</span><span class="sg-s" id="grpPrefSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
   <div class="stitle">🔔 Upozornenia</div>
   <div class="fg"><label class="fl">Interval prehliadky (mesiace)</label>
     <select class="fsel" id="sInterval"><option value="6">6</option><option value="12" selected>12</option><option value="18">18</option><option value="24">24</option></select>
@@ -558,15 +579,14 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
     </div>
     <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Svetlý režim sa lepšie číta vonku na slnku. Tlačený protokol a PDF vyzerajú v oboch režimoch rovnako.</div>
   </div>
-  <button class="btn btn-p" onclick="saveSettings()">💾 Uložiť nastavenia</button>
-  <details class="sk-fold" id="storageFold"><summary class="stitle"><span style="order:1">💾 Úložisko v telefóne</span><span class="sk-sum" id="storageSum"></span><span class="sk-arr">▸</span></summary>
-  <div id="storageBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
-  </details>
-
-  <details class="sk-fold" id="folderFold"><summary class="stitle"><span style="order:1">📁 Záloha do priečinka</span><span class="sk-sum" id="folderSum"></span><span class="sk-arr">▸</span></summary>
-  <div id="folderBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
-  </details>
-
+  <button class="btn btn-p" style="margin-top:12px" onclick="saveSettings()">💾 Uložiť nastavenia</button>
+  </div></details>
+  <details class="sgrp" id="grpProto" data-pro style="display:none"><summary><span class="sg-ic">🧾</span><span class="sg-tx"><span class="sg-t">Protokoly a pripomienky</span><span class="sg-s" id="grpProtoSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
+  <div id="grpProtoBox"></div>
+  </div></details>
+  <details class="sgrp" id="grpData"><summary><span class="sg-ic">☁️</span><span class="sg-tx"><span class="sg-t">Záloha a dáta</span><span class="sg-s" id="grpDataSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
   <div class="stitle">☁️ Google Drive záloha</div>
 
   <div data-free style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">🔒 Záloha na Google Drive je súčasťou verzie PRO.<br>Ručný <b style="color:var(--text)">Export JSON</b> nižšie funguje vždy.</div>
@@ -599,17 +619,31 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <button class="btn btn-d" id="driveDisconnectBtn" style="margin-top:6px;display:none" onclick="driveDisconnect()">🔌 Odpojiť Google Drive</button>
   </div>
 
-  <!-- Drive Help Modal trigger -->
-  <div class="stitle">📦 Export / Import</div>
-  <button class="btn btn-o" onclick="exportExcel()">📊 Export do Excelu (.xlsx)</button>
-  <button class="btn btn-s" style="margin-top:6px" onclick="exportJSON()">📤 Export JSON (záloha)</button>
+  <div class="stitle">💾 Záloha do súboru a obnova</div>
+  <button class="btn btn-s" onclick="exportJSON()">📤 Export JSON (záloha)</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('importFile').click()">📥 Import JSON</button>
   <input type="file" id="importFile" accept=".json" onchange="importJSON(event)">
   <button class="btn btn-s" id="undoRestoreBtn" style="margin-top:6px;display:none" onclick="restorePrevData()">↩️ Vrátiť dáta spred poslednej obnovy</button>
   <button class="btn btn-o" id="lightRestoreBtn" style="margin-top:6px;display:none" onclick="restoreFromLight()">🛟 Obnoviť zo záchrannej kópie (bez fotiek)</button>
+      <details class="sk-fold" id="storageFold"><summary class="stitle"><span style="order:1">💾 Úložisko v telefóne</span><span class="sk-sum" id="storageSum"></span><span class="sk-arr">▸</span></summary>
+  <div id="storageBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
+  </details>
+
+  <details class="sk-fold" id="folderFold"><summary class="stitle"><span style="order:1">📁 Záloha do priečinka</span><span class="sk-sum" id="folderSum"></span><span class="sk-arr">▸</span></summary>
+  <div id="folderBox" style="background:var(--surf2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px;"></div>
+  </details>
+
+  <button class="btn btn-o" id="demoRemoveBtn" style="margin-top:6px;display:none" onclick="removeDemo()">🧪 Odstrániť ukážkových zákazníkov</button>
   <button class="btn btn-d" style="margin-top:12px" onclick="clearAll()">🗑️ Vymazať všetky dáta</button>
 
-  <div class="stitle">ℹ️ O aplikácii</div>
+  </div></details>
+  <details class="sgrp" id="grpExport"><summary><span class="sg-ic">📊</span><span class="sg-tx"><span class="sg-t">Export a prehľady</span><span class="sg-s" id="grpExportSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
+  <div class="stitle" style="display:none">📦 Export</div>
+  <button class="btn btn-o" onclick="exportExcel()">📊 Export do Excelu (.xlsx)</button>
+  </div></details>
+  <details class="sgrp" id="grpAbout"><summary><span class="sg-ic">ℹ️</span><span class="sg-tx"><span class="sg-t">O aplikácii a pomoc</span><span class="sg-s" id="grpAboutSum"></span></span><span class="sg-arr">›</span></summary>
+  <div class="sg-body">
   <div id="aboutBox" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.8"></div>
   <button class="btn btn-p" id="updBtn" style="margin-top:8px" onclick="updateApp()">🔄 Stiahnuť aktuálnu verziu</button>
   <div id="updStatus" style="display:none;font-family:var(--mono);font-size:11px;line-height:1.6;margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--surf2);border:1px solid var(--border)"></div>
@@ -617,6 +651,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div style="text-align:center;font-family:var(--mono);font-size:10px;margin-top:8px"><a href="obchodne-podmienky.html" style="color:var(--muted)">Obchodné podmienky</a> · <a href="zasady.html" style="color:var(--muted)">Ochrana osobných údajov</a></div>
   <button class="btn btn-s" style="margin-top:6px" onclick="openAbout()">✨ Čo je nové</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="copySupportInfo()">📋 Skopírovať údaje pre podporu</button>
+  </div></details>
 </div>
 
 <!-- MODAL: DRIVE HELP -->
@@ -1015,7 +1050,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div class="mdrag"></div>
   <div class="mtitle"><span id="licModalTitle">🔑 Limit bezplatnej verzie</span><button class="mclose" onclick="document.getElementById('licModal').classList.remove('open')">✕</button></div>
   <div id="licModalBody" style="font-family:var(--mono);font-size:12px;line-height:1.8;color:var(--text)"></div>
-  <button class="btn btn-p" style="margin-top:14px" onclick="closeAllModals();pg('settings')">🔑 Zadať licenčný kľúč</button>
+  <button class="btn btn-p" style="margin-top:14px" onclick="closeAllModals();goSet('grpLic')">🔑 Zadať licenčný kľúč</button>
   <button class="btn btn-s" style="margin-top:6px" onclick="document.getElementById('licModal').classList.remove('open')">Zavrieť</button>
 </div>
 </div>
@@ -1075,8 +1110,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.21.3';
+const APP_VERSION = '2026.11.21.4';
 const CHANGELOG = [
+  { v:'2026.11.21.4', items:['Nastavenia sú prehľadnejšie: rozdelené do skupín (Licencia, Technik a firma, Predvoľby, Protokoly, Dáta a zálohy, Export, O aplikácii), v nadpise každej je krátky súhrn','Upozornenia na úvodnej obrazovke otvoria rovno správnu časť nastavení'] },
   { v:'2026.11.21.3', items:['Ikona aplikácie aj pre odkaz na ploche v počítači a ostrejšia ikona na iPhone'] },
   { v:'2026.11.21.2', items:['Zákazníci: prepínač triedenia — podľa termínu prehliadky, naposledy pridaní / upravení, alebo podľa mena'] },
   { v:'2026.11.21.1', items:['Zoznam zákazníkov má v telefóne aj v počítači rovnaké poradie: najprv po termíne, potom podľa najbližšieho termínu prehliadky'] },
@@ -2384,21 +2420,22 @@ function renderLicUI(){
   const ban=document.getElementById('licBanner');
   if(ban){
     const parts=[];
-    if(!settings.firma) parts.push(`<div class="ai w" onclick="pg('settings')"><div class="ai-ic">🏢</div><div class="ai-tx"><div class="ai-nm">Vyplň údaje svojej firmy</div><div class="ai-ds">Zobrazia sa v hlavičke protokolov a cenových ponúk · Nastavenia</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
-    if(hasDemo) parts.push(`<div class="ai ok" onclick="pg('settings')"><div class="ai-ic">🧪</div><div class="ai-tx"><div class="ai-nm">Zobrazujú sa ukážkoví zákazníci</div><div class="ai-ds">Odstrániš ich v Nastaveniach · do limitu sa nepočítajú</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+    if(!settings.firma) parts.push(`<div class="ai w" onclick="goSet('grpFirm')"><div class="ai-ic">🏢</div><div class="ai-tx"><div class="ai-nm">Vyplň údaje svojej firmy</div><div class="ai-ds">Zobrazia sa v hlavičke protokolov a cenových ponúk · Nastavenia</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+    if(hasDemo) parts.push(`<div class="ai ok" onclick="goSet('grpData')"><div class="ai-ic">🧪</div><div class="ai-tx"><div class="ai-nm">Zobrazujú sa ukážkoví zákazníci</div><div class="ai-ds">Odstrániš ich v Nastaveniach · do limitu sa nepočítajú</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     if(!LIC.valid && storageReady){
       const s=used>=FREE_LIMIT?'d':(used>=FREE_LIMIT-2?'w':'ok');
-      parts.push(`<div class="ai ${s}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, cenové ponuky, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+      parts.push(`<div class="ai ${s}" onclick="goSet('grpLic')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Bezplatná verzia · ${used} / ${FREE_LIMIT} zákazníkov</div><div class="ai-ds">${LIC.reason?esc(LIC.reason):'Protokoly, cenové ponuky, zálohy a viac zákazníkov vo verzii PRO'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     if(LIC.valid && LIC.exp && LIC.exp-Date.now()<30*864e5){
       const d=Math.max(0,Math.ceil((LIC.exp-Date.now())/864e5));
-      parts.push(`<div class="ai ${d<=7?'d':'w'}" onclick="pg('settings')"><div class="ai-ic">⏳</div><div class="ai-tx"><div class="ai-nm">Licencia končí o ${d} ${d===1?'deň':(d>=2&&d<=4?'dni':'dní')} (${fmtTs(LIC.exp)})</div><div class="ai-ds">Predĺž ju v Nastaveniach → Licencia, aby funkcie PRO nevypadli</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+      parts.push(`<div class="ai ${d<=7?'d':'w'}" onclick="goSet('grpLic')"><div class="ai-ic">⏳</div><div class="ai-tx"><div class="ai-nm">Licencia končí o ${d} ${d===1?'deň':(d>=2&&d<=4?'dni':'dní')} (${fmtTs(LIC.exp)})</div><div class="ai-ds">Predĺž ju v Nastaveniach → Licencia, aby funkcie PRO nevypadli</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     if(LIC.valid && LIC.limit!==Infinity && used>=LIC.limit-2){
-      parts.push(`<div class="ai ${used>=LIC.limit?'d':'w'}" onclick="pg('settings')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Licencia · ${used} / ${LIC.limit} zákazníkov</div><div class="ai-ds">${used>=LIC.limit?'Limit je vyčerpaný — ďalších pridáš po prechode na vyšší stupeň':'Blížiš sa k limitu svojej licencie'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
+      parts.push(`<div class="ai ${used>=LIC.limit?'d':'w'}" onclick="goSet('grpLic')"><div class="ai-ic">🔑</div><div class="ai-tx"><div class="ai-nm">Licencia · ${used} / ${LIC.limit} zákazníkov</div><div class="ai-ds">${used>=LIC.limit?'Limit je vyčerpaný — ďalších pridáš po prechode na vyšší stupeň':'Blížiš sa k limitu svojej licencie'}</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`);
     }
     ban.innerHTML=parts.join('');
   }
+  try{ settingsSums(); }catch(e){}
 }
 // ═══ OBJEDNÁVKA LICENCIE ═══
 // Objednávka sa uloží na licenčnom serveri. Po úhrade faktúry ju predajca vybaví
@@ -2884,6 +2921,65 @@ function stDot(s){return{ov:'🔴',d:'🟠',w:'🟡',ok:'🟢',none:'⚪'}[s]||'
 // ═══════════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════════
+// ═══ NASTAVENIA: SKUPINY ═══
+// Karta je rozdelená na zbalené skupiny; otvorená je najviac jedna. Sekcie, ktoré pridáva PRO modul,
+// sa presunú do svojej skupiny. Keď sa otvorí vnorená časť (napr. Google Drive z upozornenia), otvorí sa aj jej skupina.
+const SET_MOVE={ tplCfg:'grpProtoBox', remindCfg:'grpProtoBox', termCfg:'grpProtoBox' };
+function organizeSettings(){
+  let moved=false;
+  Object.keys(SET_MOVE).forEach(id=>{ const el=document.getElementById(id), to=document.getElementById(SET_MOVE[id]);
+    if(el && to && el.parentNode!==to){ to.appendChild(el); moved=true; } });
+  const box=document.getElementById('grpProtoBox'), g=document.getElementById('grpProto');
+  if(box && g) g.style.display=box.children.length?'':'none';
+  return moved;
+}
+function setSum(id,txt,cls){ const e=document.getElementById(id+'Sum'); if(!e) return; e.textContent=txt||''; e.className='sg-s'+(cls?' '+cls:''); }
+function settingsSums(){
+  try{
+    const used=custs.filter(c=>!c.demo).length;
+    if(LIC.valid) setSum('grpLic','PRO · '+(isFinite(LIC.limit)?'do '+LIC.limit+' zákazníkov':'neobmedzene')+(LIC.exp?' · platí do '+fmtTs(LIC.exp):''),
+      LIC.exp && (LIC.exp-Date.now())<30*864e5 ? 'warn':'ok');
+    else setSum('grpLic','Bezplatná verzia · '+used+' / '+FREE_LIMIT+' zákazníkov', used>=FREE_LIMIT?'warn':'');
+    const S=settings||{};
+    setSum('grpFirm', S.firma ? [S.firma, S.name].filter(Boolean).join(' · ') : 'Nevyplnené — údaje do hlavičky protokolu', S.firma?'':'warn');
+    const nav={auto:'navigácia automaticky',google:'Google Maps',apple:'Apple Maps',waze:'Waze'}[S.navApp||'auto']||'';
+    let th='dark'; try{ th=localStorage.getItem('sk2_theme')||'dark'; }catch(e){}
+    setSum('grpPref','Prehliadka každých '+(S.interval||12)+' mes. · '+nav+' · '+({dark:'tmavý',light:'svetlý',auto:'farby podľa telefónu'}[th]||th));
+    const n=[...document.querySelectorAll('#grpProtoBox>details')].length;
+    setSum('grpProto', n?'Šablóny protokolov, texty pripomienok, ďalšie termíny':'');
+    const ds=document.getElementById('driveStatusText'), st=document.getElementById('storageSum');
+    const dtx=ds && LIC.valid ? 'Google Drive: '+ds.textContent.trim() : 'Export / import zálohy';
+    const bad=ds && /nepripoj/i.test(ds.textContent);
+    setSum('grpData', dtx+(st&&st.textContent.trim()?' · telefón '+st.textContent.replace(/^[·\s]+/,'').trim():''), LIC.valid&&bad?'warn':'');
+    setSum('grpExport', LIC.valid?'Excel, prehľad tržieb':'Excel');
+    setSum('grpAbout','Verzia '+APP_VERSION+' · návod, novinky, podpora');
+  }catch(e){ console.warn('settingsSums', e); }
+}
+function goSet(id){
+  pg('settings');
+  const g=document.getElementById(id); if(!g) return;
+  g.open=true;
+  setTimeout(()=>g.scrollIntoView({block:'start',behavior:'smooth'}),60);
+}
+(function(){
+  const page=document.getElementById('page-settings'); if(!page) return;
+  page.addEventListener('toggle',e=>{
+    const t=e.target; if(!(t instanceof HTMLDetailsElement) || !t.open) return;
+    if(t.classList.contains('sgrp')){
+      page.querySelectorAll('details.sgrp[open]').forEach(o=>{ if(o!==t) o.open=false; });
+      try{ sessionStorage.setItem('sk2_setOpen', t.id); }catch(_){}
+      settingsSums();
+    } else {
+      const g=t.closest('details.sgrp'); if(g && !g.open) g.open=true;
+    }
+  }, true);
+  page.addEventListener('toggle',e=>{ const t=e.target; if(t.classList&&t.classList.contains('sgrp')&&!t.open){ try{ if(sessionStorage.getItem('sk2_setOpen')===t.id) sessionStorage.removeItem('sk2_setOpen'); }catch(_){} } }, true);
+  let tmr=null;
+  new MutationObserver(()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ organizeSettings(); settingsSums(); },50); }).observe(page,{childList:true,subtree:true});
+  organizeSettings();
+  try{ const id=sessionStorage.getItem('sk2_setOpen'); const g=id&&document.getElementById(id); if(g) g.open=true; }catch(_){}
+})();
+
 function pg(p){
   document.querySelectorAll('.pg').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.nb').forEach(x=>x.classList.remove('active'));
@@ -2893,6 +2989,7 @@ function pg(p){
   if(p==='customers')renderCusts();
   if(p==='calendar')renderCal();
   if(p==='map')renderMap();
+  if(p==='settings'){ organizeSettings(); settingsSums(); }
   if(p==='settings')loadSett();
 }
 
@@ -3579,6 +3676,7 @@ function saveSettings(){
   if(!saveSett()) return;
   if(settings.name) document.getElementById('techLabel').textContent=settings.name;
   renderLicUI();
+  settingsSums();
   showToast('✅ Uložené');
 }
 
@@ -3870,7 +3968,7 @@ function renderBackupBanner(){
   if(!storageReady || storageFailed || !real){ el.innerHTML=''; return; }
   const ts=lastBackupTs(), days=ts?Math.floor((Date.now()-ts)/86400000):null;
   if(days!==null && days<7){ el.innerHTML=''; return; }
-  el.innerHTML=`<div class="ai ${days===null||days>=30?'ov':'w'}" onclick="pg('settings')"><div class="ai-ic">💾</div><div class="ai-tx">
+  el.innerHTML=`<div class="ai ${days===null||days>=30?'ov':'w'}" onclick="goSet('grpData')"><div class="ai-ic">💾</div><div class="ai-tx">
     <div class="ai-nm">${days===null?'Dáta ešte neboli zálohované':'Posledná záloha pred '+days+' dňami'}</div>
     <div class="ai-ds">Zálohuj v Nastaveniach — Drive, priečinok alebo Export JSON</div></div><div style="color:var(--muted);font-size:16px">›</div></div>`;
 }

@@ -2,7 +2,7 @@
 // Vďaka nemu sa aplikácia otvorí aj bez internetu (kotolňa, pivnica) a knižnice z internetu sa držia v zariadení.
 // Dáta zákazníkov sa tu neukladajú — tie sú v úložisku aplikácie.
 // Pri zmene tohto súboru zvýš číslo verzie.
-const VERSION = 'sk-v11';
+const VERSION = 'sk-v12';
 const SHELL = VERSION + '-shell';
 const LIBS = 'sk-libs-v1';
 const LOCAL = 'sk-local-v1'; // knižnica a písma na PDF z priečinka lib/ (veľké, menia sa zriedka)
