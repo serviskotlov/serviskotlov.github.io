@@ -120,6 +120,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .sbar input:focus{border-color:var(--accent);}
 .badd{background:var(--accent);color:var(--bg);border:none;border-radius:10px;width:42px;font-size:21px;cursor:pointer;font-weight:800;transition:transform .15s;}
 .badd:active{transform:scale(.92);}
+.csort{display:flex;align-items:center;gap:8px;margin:-4px 0 12px;font-family:var(--mono);font-size:11px;color:var(--muted);}
+.csort select{background:var(--surf2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 8px;font-family:var(--mono);font-size:11px;}
 .chips{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;}
 .chips::-webkit-scrollbar{display:none;}
 .chip{background:var(--surf2);border:1px solid var(--border);color:var(--muted);padding:4px 11px;border-radius:20px;font-family:var(--mono);font-size:10px;white-space:nowrap;cursor:pointer;transition:all .2s;}
@@ -463,6 +465,12 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
     <div class="chip" onclick="setF('w',this)">⚠️ Blíži sa</div>
     <div class="chip" onclick="setF('ok',this)">✅ OK</div>
   </div>
+  <div class="csort"><label for="custSort">Zoradiť:</label>
+    <select id="custSort" onchange="setCustSort(this.value)">
+      <option value="term">podľa termínu prehliadky</option>
+      <option value="recent">naposledy pridaní / upravení</option>
+      <option value="name">podľa mena (A – Z)</option>
+    </select></div>
   <div id="custList"></div>
 </div>
 
@@ -1066,8 +1074,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.21.1';
+const APP_VERSION = '2026.11.21.2';
 const CHANGELOG = [
+  { v:'2026.11.21.2', items:['Zákazníci: prepínač triedenia — podľa termínu prehliadky, naposledy pridaní / upravení, alebo podľa mena'] },
   { v:'2026.11.21.1', items:['Zoznam zákazníkov má v telefóne aj v počítači rovnaké poradie: najprv po termíne, potom podľa najbližšieho termínu prehliadky'] },
   { v:'2026.11.21', items:['PRO: analýza spalín plynového kotla — hodnoty po servise pri min. a max. výkone; tlak plynu statický a dynamický jedno políčko','PRO: poznámka ku každému úkonu tlačidlom ✎ (aj pri OK a N/A), vytlačí sa v protokole','PDF protokolu z iPhonu: text sa už nezväčšuje a podpisy ostávajú pri bode 8'] },
   { v:'2026.11.20.2', items:['Objednávka licencie priamo v aplikácii (Nastavenia → Licencia): fakturačné údaje sa doplnia samé, po úhrade faktúry sa licencia aktivuje sama — kľúč netreba prepisovať'] },
@@ -2936,7 +2945,12 @@ function renderDash(){
 // CUSTOMERS LIST
 // ═══════════════════════════════════════════════
 function setF(f,el){filterVal=f;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderCusts();}
+// triedenie zoznamu zákazníkov (pamätá sa v tomto zariadení)
+let custSort='term';
+try{ const v=localStorage.getItem('sk2_custSort'); if(['term','recent','name'].includes(v)) custSort=v; }catch(e){}
+function setCustSort(v){ custSort=['term','recent','name'].includes(v)?v:'term'; try{ localStorage.setItem('sk2_custSort',custSort); }catch(e){} renderCusts(); }
 function renderCusts(){
+  const so=document.getElementById('custSort'); if(so && so.value!==custSort) so.value=custSort;
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
   const stOrd={ov:0,d:1,w:2,ok:3,none:4};
   let list=custs.filter(c=>{
@@ -2949,6 +2963,10 @@ function renderCusts(){
   // v rámci stavu podľa najbližšieho termínu (najskôr hore), bez dátumu podľa mena —
   // poradie je tak rovnaké v telefóne aj v počítači, nezávisle od poradia uloženia
   }).sort((a,b)=>{
+    const byName=()=>String(a.name||'').localeCompare(String(b.name||''),'sk');
+    if(custSort==='name') return byName();
+    // čas poslednej zmeny vedie verzia PRO; bez neho ostane poradie uloženia (nový zákazník je navrchu)
+    if(custSort==='recent') return (Number(b.updatedAt)||0)-(Number(a.updatedAt)||0);
     const d=stOrd[getSt(a)]-stOrd[getSt(b)]; if(d) return d;
     const na=effNext(a), nb=effNext(b);
     if(isISO(na)&&isISO(nb)&&na!==nb) return na<nb?-1:1;
