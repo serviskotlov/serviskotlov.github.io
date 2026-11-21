@@ -1066,8 +1066,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.21';
+const APP_VERSION = '2026.11.21.1';
 const CHANGELOG = [
+  { v:'2026.11.21.1', items:['Zoznam zákazníkov má v telefóne aj v počítači rovnaké poradie: najprv po termíne, potom podľa najbližšieho termínu prehliadky'] },
   { v:'2026.11.21', items:['PRO: analýza spalín plynového kotla — hodnoty po servise pri min. a max. výkone; tlak plynu statický a dynamický jedno políčko','PRO: poznámka ku každému úkonu tlačidlom ✎ (aj pri OK a N/A), vytlačí sa v protokole','PDF protokolu z iPhonu: text sa už nezväčšuje a podpisy ostávajú pri bode 8'] },
   { v:'2026.11.20.2', items:['Objednávka licencie priamo v aplikácii (Nastavenia → Licencia): fakturačné údaje sa doplnia samé, po úhrade faktúry sa licencia aktivuje sama — kľúč netreba prepisovať'] },
   { v:'2026.11.20.1', items:['Nový kontakt: info@serviskotlovpro.sk, objednávky a faktúry fakturacia@serviskotlovpro.sk'] },
@@ -2945,7 +2946,14 @@ function renderCusts(){
     if(filterVal==='w')return m&&s==='w';
     if(filterVal==='ov')return m&&(s==='ov'||s==='d');
     return m;
-  }).sort((a,b)=>stOrd[getSt(a)]-stOrd[getSt(b)]);
+  // v rámci stavu podľa najbližšieho termínu (najskôr hore), bez dátumu podľa mena —
+  // poradie je tak rovnaké v telefóne aj v počítači, nezávisle od poradia uloženia
+  }).sort((a,b)=>{
+    const d=stOrd[getSt(a)]-stOrd[getSt(b)]; if(d) return d;
+    const na=effNext(a), nb=effNext(b);
+    if(isISO(na)&&isISO(nb)&&na!==nb) return na<nb?-1:1;
+    return String(a.name||'').localeCompare(String(b.name||''),'sk');
+  });
   const el=document.getElementById('custList');
   if(!storageReady){el.innerHTML='<div class="empty"><div class="empty-ic">⏳</div>Načítavam dáta…</div>';return;}
   if(!list.length){el.innerHTML='<div class="empty"><div class="empty-ic">🔍</div>'+(storageFailed?'Úložisko sa neotvorilo — zatvor a znova otvor aplikáciu':(storageWiped?'Dáta sa nenašli — obnov zálohu v Nastaveniach':'Žiadni zákazníci nenájdení'))+'</div>';return;}
