@@ -771,9 +771,10 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
     <div class="fg">
       <label class="fl">DSN / Sériové číslo</label>
       <div style="display:flex;gap:8px;align-items:center;">
-        <input class="fi" id="fSerial" placeholder="Zadaj ručne alebo skenuj..." style="flex:1">
+        <input class="fi" id="fSerial" placeholder="Zadaj ručne alebo skenuj..." style="flex:1" oninput="serialDupAll()">
         <button type="button" onclick="openScanner()" style="background:var(--accent);border:none;border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;flex-shrink:0;" title="Skenovať čiarový/QR kód">📷</button>
       </div>
+      <div id="fSerialDup"></div>
     </div>
 
     <div id="devEditor"></div>
@@ -1110,8 +1111,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.23';
+const APP_VERSION = '2026.11.23.1';
 const CHANGELOG = [
+  { v:'2026.11.23.1', items:['Výrobné číslo, ktoré už je v databáze, aplikácia hneď oznámi — po naskenovaní aj pri písaní — a ukáže, u ktorého zákazníka je uložené','Pred uložením zákazníka s rovnakým výrobným číslom sa ešte opýta'] },
   { v:'2026.11.23', items:['Skener štítka: tlačidlo „Odfotiť štítok“ je vždy po ruke a funguje aj na iPhone — fotka sa prečíta, aj keď kamera naživo kód nezachytí','Keď sa kód na fotke nenájde, dá sa S/N napísať ručne a zákazník sa rovno vyhľadá'] },
   { v:'2026.11.21.4', items:['Nastavenia sú prehľadnejšie: rozdelené do skupín (Licencia, Technik a firma, Predvoľby, Protokoly, Dáta a zálohy, Export, O aplikácii), v nadpise každej je krátky súhrn','Upozornenia na úvodnej obrazovke otvoria rovno správnu časť nastavení'] },
   { v:'2026.11.21.3', items:['Ikona aplikácie aj pre odkaz na ploche v počítači a ostrejšia ikona na iPhone'] },
@@ -2839,15 +2841,66 @@ function renderDevEditor(){
       </div>
       <div class="fg"><label class="fl">DSN / Sériové číslo</label>
         <div style="display:flex;gap:8px;align-items:center;">
-          <input class="fi" style="flex:1" value="${esc(d.serial||'')}" placeholder="Zadaj ručne alebo skenuj..." oninput="editDevices[${i}].serial=this.value">
-          <button type="button" onclick="openScanner(t=>{editDevices[${i}].serial=t;renderDevEditor();})" style="background:var(--accent);border:none;border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;flex-shrink:0;">📷</button>
-        </div></div>
+          <input class="fi" style="flex:1" value="${esc(d.serial||'')}" placeholder="Zadaj ručne alebo skenuj..." oninput="editDevices[${i}].serial=this.value;serialDupAll()">
+          <button type="button" onclick="openScanner(t=>{editDevices[${i}].serial=t;renderDevEditor();serialDupAlert(t,editDevices[${i}].id);})" style="background:var(--accent);border:none;border-radius:10px;padding:10px 14px;font-size:20px;cursor:pointer;flex-shrink:0;">📷</button>
+        </div><div id="devDup${i}"></div></div>
       <div class="frow">
         <div class="fg"><label class="fl">Posledná prehliadka</label>${inp(i,'lastService','','date')}</div>
         <div class="fg"><label class="fl">Nasledujúca prehliadka</label>${inp(i,'nextService','','date')}</div>
       </div>
     </div>`).join('')+
     `<button class="btn btn-s" onclick="addDev()">➕ Pridať ďalšie zariadenie (kotol, TČ, …)</button>`;
+  editDevices.forEach((d,i)=>serialDupNote('devDup'+i, d.serial, d.id));
+}
+
+// ── výrobné číslo, ktoré už je v databáze (u iného zákazníka alebo pri inom zariadení v tom istom formulári)
+function serialOwners(serial, devId){
+  const q=normSN(serial), res={list:[], twin:false};
+  if(q.length<4) return res;
+  custs.forEach(c=>{
+    if(c.demo || c.id===editId) return;          // upravovaný zákazník sa porovnáva podľa formulára
+    devList(c).forEach(d=>{ if(normSN(d.serial)===q) res.list.push({c,d}); });
+  });
+  const f=document.getElementById('fSerial');
+  const form=[{id:'main', serial:f?f.value:''}].concat(editDevices||[]);
+  res.twin=form.some(d=>d.id!==devId && normSN(d.serial)===q);
+  return res;
+}
+function serialDupLines(r){
+  return r.list.map(({c,d})=>c.name+(c.city?', '+c.city:'')+(hasMulti(c)?' ('+devLabel(d)+')':''))
+    .concat(r.twin?['iné zariadenie v tomto formulári']:[]);
+}
+function serialDupNote(elId, serial, devId){
+  const el=document.getElementById(elId); if(!el) return;
+  const r=serialOwners(serial, devId);
+  if(!r.list.length && !r.twin){ el.innerHTML=''; return; }
+  el.innerHTML='<div style="margin-top:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--warn);background:rgba(255,183,3,.12);font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--text)">'
+    +'⚠️ Toto výrobné číslo už je v databáze: '
+    +r.list.map(({c,d})=>'<a href="#" style="color:var(--accent);font-weight:600" onclick="openDupCust(\''+c.id+'\');return false">'+esc(c.name)+'</a>'
+      +esc((c.city?', '+c.city:'')+(hasMulti(c)?' ('+devLabel(d)+')':''))).join(' · ')
+    +(r.twin?(r.list.length?' · ':'')+'iné zariadenie v tomto formulári':'')+'</div>';
+}
+// po naskenovaní: hneď upozorní; dá sa otvoriť zákazník, ktorý už má toto číslo
+function serialDupAlert(serial, devId){
+  const r=serialOwners(serial, devId);
+  if(!r.list.length && !r.twin) return;
+  setTimeout(()=>{
+    const msg='⚠️ Výrobné číslo '+serial+' už je v databáze:\n\n• '+serialDupLines(r).join('\n• ');
+    if(r.list.length && !editId){
+      if(confirm(msg+'\n\nOtvoriť existujúceho zákazníka?\n(OK = otvoriť, rozpísaný nový zákazník sa zahodí · Zrušiť = pokračovať v zadávaní)')){
+        closeCM(); openDetail(r.list[0].c.id);
+      }
+    } else alert(msg);
+  }, 250);
+}
+function serialDupAll(){
+  const f=document.getElementById('fSerial');
+  serialDupNote('fSerialDup', f?f.value:'', 'main');
+  (editDevices||[]).forEach((d,i)=>serialDupNote('devDup'+i, d.serial, d.id));
+}
+function openDupCust(id){
+  if(!confirm('Otvoriť zákazníka s týmto výrobným číslom?\n\nRozpísané údaje v tomto formulári sa neuložia.')) return;
+  closeCM(); openDetail(id);
 }
 function addDev(){
   const d={id:uid()}; DEV_FIELDS.forEach(f=>d[f]='');
@@ -3135,6 +3188,7 @@ function openAdd(){
   currentEditPhotos=[];
   renderPhotoGrid();
   editDevices=[]; renderDevEditor();
+  serialDupNote('fSerialDup','','main');
   // reset tabs
   const modal=document.querySelector('#custModal .modal');
   modal.querySelectorAll('.mtab-content').forEach((x,i)=>{x.classList.toggle('active',i===0);});
@@ -3168,6 +3222,7 @@ function openEdit(id){
   document.getElementById('fSerial').value=c.serial||'';
   document.getElementById('fPlace').value=c.place||'';
   editDevices=JSON.parse(JSON.stringify(c.devices||[])); renderDevEditor();
+  serialDupNote('fSerialDup',c.serial,'main');
   document.getElementById('fLast').value=c.lastService||'';
   document.getElementById('fNext').value=c.nextService||'';
   document.getElementById('fNotes').value=c.notes||'';
@@ -3214,6 +3269,10 @@ async function _saveCust(){
     invoice:existing?existing.invoice:[],
   };
   if(existing && existing.demo && DEMO_NAMES.includes(name)) c.demo=true; else delete c.demo;
+  { // rovnaké výrobné číslo u iného zákazníka — uložiť len po potvrdení
+    const dup=[{id:'main',serial:c.serial}].concat(c.devices).map(d=>({s:d.serial, r:serialOwners(d.serial,d.id)})).filter(x=>x.r.list.length||x.r.twin);
+    if(dup.length && !confirm('⚠️ Výrobné číslo už je v databáze:\n\n'+dup.map(x=>x.s+'\n   • '+serialDupLines(x.r).join('\n   • ')).join('\n')+'\n\nUložiť aj tak?')) return;
+  }
   { const iv=settings.interval||12;
     if(!editId && !c.nextService && isISO(c.lastService)) c.nextService=addMonthsISO(c.lastService,iv);
     const oldDev=new Set(((existing&&existing.devices)||[]).map(d=>d.id));
@@ -4053,6 +4112,7 @@ function deliverScan(text){
   if(cb){ cb(text); return; }
   const field = document.getElementById('fSerial');
   field.value = text;
+  serialDupNote('fSerialDup', text, 'main'); serialDupAlert(text, 'main');
   field.style.borderColor = 'var(--accent3)';
   field.style.background = 'rgba(6,214,160,.1)';
   setTimeout(() => { field.style.borderColor=''; field.style.background=''; }, 2000);
