@@ -930,6 +930,8 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <div class="stitle">🔥 Analýza spalín</div>
   <div class="mer-head" style="grid-template-columns:1.25fr 1fr 1fr"><span>Veličina</span><span>Po min.</span><span>Po max.</span></div>
   <div id="merRows"></div>
+  <!-- prevHint a prevZav sú tu vopred: PRO modul by prevHint vložil medzi nadpis a tabuľku a nadpis sekcie by sa pri el. kotle / TČ neprepol -->
+  <div id="prevHint" style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.5;margin:6px 0 0"></div>
   <div class="frow" style="margin-top:8px">
     <div class="fg"><label class="fl">Tlak vody (bar)</label><input class="fi" id="pTlakSys" inputmode="decimal"></div>
     <div class="fg"><label class="fl">Expanzná (bar)</label><input class="fi" id="pTlakExp" inputmode="decimal"></div>
@@ -943,7 +945,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
   <button class="btn btn-s" style="margin-top:4px" onclick="addDiel()">➕ Pridať položku</button>
 
   <div class="stitle">📝 Závady a odporúčania</div>
-  <div class="fg"><textarea class="fta" id="pZavady" placeholder="Zistené závady, odporúčania pre zákazníka..."></textarea></div>
+  <div class="fg"><textarea class="fta" id="pZavady" placeholder="Zistené závady, odporúčania pre zákazníka..."></textarea><div id="prevZav" style="font-family:var(--mono);font-size:11px;color:var(--warn);line-height:1.5;margin:4px 0 0;white-space:pre-wrap"></div></div>
 
   <div class="stitle">🏁 Záver</div>
   <div class="zv-opt" data-zv="sposobile" onclick="setZaver('sposobile')"><div class="rd"></div>Zariadenie je spôsobilé na prevádzku</div>
@@ -1111,8 +1113,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.23.1';
+const APP_VERSION = '2026.11.23.2';
 const CHANGELOG = [
+  { v:'2026.11.23.2', items:['Protokol elektrického kotla a tepelného čerpadla: nadpis meraní už nepíše „Analýza spalín“, ale „Elektrické merania“, resp. „Chladiaci okruh a merania“'] },
   { v:'2026.11.23.1', items:['Výrobné číslo, ktoré už je v databáze, aplikácia hneď oznámi — po naskenovaní aj pri písaní — a ukáže, u ktorého zákazníka je uložené','Pred uložením zákazníka s rovnakým výrobným číslom sa ešte opýta'] },
   { v:'2026.11.23', items:['Skener štítka: tlačidlo „Odfotiť štítok“ je vždy po ruke a funguje aj na iPhone — fotka sa prečíta, aj keď kamera naživo kód nezachytí','Keď sa kód na fotke nenájde, dá sa S/N napísať ručne a zákazník sa rovno vyhľadá'] },
   { v:'2026.11.21.4', items:['Nastavenia sú prehľadnejšie: rozdelené do skupín (Licencia, Technik a firma, Predvoľby, Protokoly, Dáta a zálohy, Export, O aplikácii), v nadpise každej je krátky súhrn','Upozornenia na úvodnej obrazovke otvoria rovno správnu časť nastavení'] },
