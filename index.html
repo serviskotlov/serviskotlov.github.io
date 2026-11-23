@@ -1110,8 +1110,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.21.4';
+const APP_VERSION = '2026.11.23';
 const CHANGELOG = [
+  { v:'2026.11.23', items:['Skener štítka: tlačidlo „Odfotiť štítok“ je vždy po ruke a funguje aj na iPhone — fotka sa prečíta, aj keď kamera naživo kód nezachytí','Keď sa kód na fotke nenájde, dá sa S/N napísať ručne a zákazník sa rovno vyhľadá'] },
   { v:'2026.11.21.4', items:['Nastavenia sú prehľadnejšie: rozdelené do skupín (Licencia, Technik a firma, Predvoľby, Protokoly, Dáta a zálohy, Export, O aplikácii), v nadpise každej je krátky súhrn','Upozornenia na úvodnej obrazovke otvoria rovno správnu časť nastavení'] },
   { v:'2026.11.21.3', items:['Ikona aplikácie aj pre odkaz na ploche v počítači a ostrejšia ikona na iPhone'] },
   { v:'2026.11.21.2', items:['Zákazníci: prepínač triedenia — podľa termínu prehliadky, naposledy pridaní / upravení, alebo podľa mena'] },
@@ -4096,9 +4097,13 @@ async function openScanner(cb){
 
   overlay.style.display = 'flex';
   overlay.style.flexDirection = 'column';
+  // fotka štítka je vždy po ruke — malé alebo lesklé kódy na štítkoch kamera naživo často nezachytí
+  const photoBtn = document.getElementById('scanPhotoBtn');
+  photoBtn.textContent = '📸 Odfotiť štítok'; photoBtn.style.display = 'inline-block';
 
   const video = document.getElementById('scannerVideo');
   const statusEl = document.getElementById('scannerStatus');
+  statusEl.textContent = '📷 Inicializujem kameru...';
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -4139,14 +4144,16 @@ async function openScanner(cb){
 
     // Fallback: manual frame scanning with canvas
     } else {
-      statusEl.textContent = 'Namieriť — alebo použiť fotku ↓';
-      // Show photo button as primary option
-      document.getElementById('scanPhotoBtn').style.display = 'block';
+      statusEl.textContent = 'Odfoť štítok tlačidlom dole ↓';
     }
 
   } catch(e){
-    closeScanner();          // vypne aj kameru, ak sa už stihla zapnúť
-    useCameraPhoto();
+    // Kamera sa nespustila (zákaz, používa ju iná aplikácia…). Okno ostáva otvorené s tlačidlom fotky:
+    // fotoaparát sa smie otvoriť len po ťuknutí — automaticky by ho iPhone zablokoval.
+    console.warn('Kamera', e);
+    const v=document.getElementById('scannerVideo'); if(v.srcObject){ v.srcObject.getTracks().forEach(t=>t.stop()); v.srcObject=null; }
+    scanStream = null;
+    if(scannerActive) statusEl.textContent = '⚠️ Kamera sa nespustila — odfoť štítok tlačidlom dole';
   }
 }
 
@@ -4171,7 +4178,11 @@ function closeScanner(){
 
 // Universal fallback — nafotiť štítok
 function useCameraPhoto(){
-  document.getElementById('photoScanInput').click();
+  // živú kameru treba najprv vypnúť (iPhone inak fotoaparát neotvorí); cieľ skenu (scanCb) ostáva
+  const cb=scanCb;
+  closeScanner();
+  scanCb=cb;
+  document.getElementById('photoScanInput').click();      // ešte v rámci ťuknutia
 }
 
 // Prečíta čiarový / QR kód z fotky: zmenší ju, nakreslí na plátno a skúsi rôzne spôsoby a otočenie.
@@ -4179,10 +4190,14 @@ async function zxingFromFile(file){
   const url=URL.createObjectURL(file);
   try{
     const img=new Image(); await new Promise((ok,no)=>{ img.onload=ok; img.onerror=no; img.src=url; });
-    const k=Math.min(1, 1600/Math.max(img.naturalWidth,img.naturalHeight));
-    const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
     const hints=new Map(); hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
     const rd=new ZXing.MultiFormatReader(); rd.setHints(hints);
+    // menší obrázok je rýchlejší, väčší prečíta drobný kód na štítku nafotenom z diaľky
+    const big=Math.max(img.naturalWidth,img.naturalHeight);
+    for(const max of [1600, 2600]){
+    if(max>1600 && big<=1700) break;
+    const k=Math.min(1, max/big);
+    const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
     for(const rot of [0,90]){
       const cv=document.createElement('canvas'); cv.width=rot?h:w; cv.height=rot?w:h;
       const g=cv.getContext('2d',{willReadFrequently:true}); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height);
@@ -4191,6 +4206,7 @@ async function zxingFromFile(file){
       for(const Bin of [ZXing.HybridBinarizer, ZXing.GlobalHistogramBinarizer]){
         try{ const r=rd.decode(new ZXing.BinaryBitmap(new Bin(src))); if(r && r.getText()) return r.getText(); }catch(e){}
       }
+    }
     }
     return null;
   } finally { URL.revokeObjectURL(url); }
@@ -4210,10 +4226,8 @@ async function scanFromPhoto(e){
       if(codes.length > 0){
         deliverScan(codes[0].rawValue);
         return;
-      } else {
-        alert('Kód sa nenašiel na fotke.\nSkús nafotiť zblízka za dobrého svetla.');
-        return;
       }
+      // nenašiel — skúsi ešte ZXing (aj otočený obrázok)
     } catch(e){ console.error(e); }
   }
   if(window.ZXing){
@@ -4227,8 +4241,8 @@ async function scanFromPhoto(e){
     }catch(e){ console.warn('ZXing foto',e); }
     finally{ URL.revokeObjectURL(url); }
   }
-  // No BarcodeDetector — ask manual
-  const val = prompt('Automatické skenovanie nie je k dispozícii.\nZadaj DSN / sériové číslo ručne:');
+  // kód sa neprečítal — S/N sa dá napísať ručne
+  const val = prompt('Kód sa na fotke nepodarilo prečítať.\n(Skús nafotiť zblízka, ostro a bez odlesku.)\n\nAlebo napíš sériové číslo / DSN ručne:');
   if(val) deliverScan(val.trim()); else scanCb=null;
 }
 
