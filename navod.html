@@ -124,6 +124,23 @@
   <figure class="shot"><img src="navod/zakaznik.jpg" alt="Formulár nového zákazníka" loading="lazy"><figcaption>Nový zákazník</figcaption></figure>
 </div>
 
+<h3 id="stitok">Výrobné číslo zo štítka (📷)</h3>
+<p>Tlačidlo <kbd>📷</kbd> je pri poli <strong>DSN / Sériové číslo</strong> a v zozname zákazníkov vedľa vyhľadávania.</p>
+<ol>
+  <li>Ťukni na <kbd>📷</kbd>. Otvorí sa živá kamera – namier ju na čiarový alebo QR kód na štítku. Keď ho prečíta, použije sa hneď a fotiť netreba.</li>
+  <li>Ak kamera kód naživo nezachytí (drobný, lesklý alebo zle osvetlený štítok), ťukni dole na <strong>📸 Odfotiť štítok</strong>. Kamera sa vypne a otvorí sa fotoaparát telefónu.</li>
+  <li>Odfoť štítok a fotku potvrď. Aplikácia na nej kód nájde sama – aj keď je štítok nalepený nastojato alebo je kód malý.</li>
+  <li>Keď kód nájde:
+    <ul>
+      <li><strong>pri vyhľadávaní</strong> rovno otvorí zákazníka s týmto výrobným číslom (ak ich je viac, nechá ich v zozname),</li>
+      <li><strong>pri zadávaní zákazníka</strong> vpíše číslo do poľa. Ak toto číslo už je v databáze, upozorní ťa, u ktorého zákazníka je uložené, a ponúkne otvoriť ho.</li>
+    </ul>
+  </li>
+  <li>Keď kód nenájde, ponúkne napísať číslo ručne. Alebo daj Zrušiť a odfoť znova – zblízka, ostro a bez odlesku.</li>
+</ol>
+<p>Ak sa kamera vôbec nespustí (napr. nemá povolený prístup), okno ostane otvorené a tlačidlo <strong>📸 Odfotiť štítok</strong> funguje aj tak. Aplikácia číta čiarové a QR kódy – číslo, ktoré je na štítku len ako text, treba napísať ručne.</p>
+<p>Rovnaké výrobné číslo aplikácia stráži aj pri písaní: pod poľom sa ukáže žltá poznámka s menom zákazníka, ktorý ho už má, a pred uložením sa ešte opýta.</p>
+
 <h2 id="prehlad">4. Prehľad a termíny</h2>
 <div class="step">
   <div class="txt">
@@ -281,6 +298,10 @@
 <details>
   <summary>Vidí niekto údaje mojich zákazníkov?</summary>
   <p>Nie. Údaje sú v tvojom zariadení a na tvojom vlastnom Disku Google. Prevádzkovateľ aplikácie k nim nemá prístup. Podrobnosti sú v <a href="zasady.html">zásadách ochrany osobných údajov</a>.</p>
+</details>
+<details>
+  <summary>Kamera nevie prečítať kód na štítku. Čo s tým?</summary>
+  <p>V okne skenera ťukni na <strong>📸 Odfotiť štítok</strong> a štítok odfoť zblízka, ostro a bez odlesku – z fotky sa kód prečíta spoľahlivejšie ako naživo. Ak ani to nepomôže, aplikácia ponúkne napísať výrobné číslo ručne. Viac v časti <a href="#stitok">Výrobné číslo zo štítka</a>.</p>
 </details>
 <details>
   <summary>Omylom som vymazal zákazníka. Dá sa to vrátiť?</summary>
