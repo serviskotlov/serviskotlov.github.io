@@ -324,6 +324,18 @@ function spatDoAppky(){
   }catch(e){}
   return true;   // odkaz „./“ otvorí aplikáciu
 }
+// Návod otvorený z webu www.serviskotlovpro.sk: tlačidlo „‹ Späť“ vedie na hlavnú stránku webu.
+(function(){
+  var WEB='https://www.serviskotlovpro.sk/', web=false;
+  try{
+    web=/[?&]z=web\b/.test(location.search) || /(^|\.)serviskotlovpro\.sk$/i.test(document.referrer?new URL(document.referrer).hostname:'');
+    if(web) sessionStorage.setItem('skNavodWeb','1'); else web=sessionStorage.getItem('skNavodWeb')==='1';
+  }catch(e){}
+  if(!web) return;
+  document.querySelectorAll('a.back, a.back2').forEach(function(a){
+    a.textContent='‹ Späť'; a.href=WEB; a.onclick=null; a.removeAttribute('onclick');
+  });
+})();
 </script>
 </body>
 </html>
