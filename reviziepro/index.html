@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReviziePRO – OPaOS OPZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: clinical work tool for a gas inspector, calm and exact
+   IDEA: the inspector's report pad – numbered sheets, stamped verdict
+   PICTURE: the live verdict strip (záver + termíny) always beside the form
+   COLOUR and TYPE: paper white / graphite, gas-pipe yellow accent, alarm red; Inter Tight + Inter
+   LAYOUT: top bar, step tabs, one calm form column + sticky verdict panel; stacks below 900px */
+:root{color-scheme:light dark;--bg:light-dark(#f4f5f6,#141618);--card:light-dark(#fff,#1d2023);--ink:light-dark(#16181a,#eceef0);--mut:light-dark(#5d646b,#a3aab1);--line:light-dark(#dde1e5,#30353a);--acc:#f2c200;--accInk:#16181a;--red:light-dark(#c81e12,#ff6a5c);--grn:light-dark(#18794e,#5fd39a);--amb:light-dark(#9a6700,#f0b93a);--fld:light-dark(#fbfbfc,#24282c)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Inter Tight",Inter,sans-serif;line-height:1.15;margin:0}
+h2{font-size:22px;margin-bottom:14px}h3{font-size:16px;margin:18px 0 8px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px max(3vw,14px);background:#16181a;color:#fff;border-bottom:4px solid var(--acc)}
+header h1{font-size:20px}header h1 b{color:var(--acc)}
+nav.main{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav.main button{background:none;border:0;color:#cfd4d9;font:600 14px Inter;padding:10px 14px;border-radius:8px;cursor:pointer;min-height:44px}
+nav.main button.on{background:var(--acc);color:var(--accInk)}
+main{padding:18px max(3vw,14px) 60px;max-width:1400px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 14px Inter;padding:9px 14px;border-radius:8px;cursor:pointer;min-height:42px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--accInk)}.btn.dan{color:var(--red)}.btn.sm{min-height:34px;padding:5px 10px;font-size:13px}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px 14px}
+.grid .w2{grid-column:span 2}@media(max-width:520px){.grid .w2{grid-column:auto}}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut);font-weight:500}
+label.f>span.req::after{content:" *";color:var(--red)}
+input,select,textarea{font:16px Inter;color:var(--ink);background:var(--fld);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:42px;width:100%}
+textarea{min-height:70px;resize:vertical}
+input[type=checkbox],input[type=radio]{width:20px;height:20px;min-height:0;accent-color:#b08c00}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink);min-height:36px}
+.steps{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scroll-snap-type:x proximity}
+.steps button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font:600 13px Inter;cursor:pointer;min-height:40px;scroll-snap-align:start}
+.steps button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps button .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--line)}
+.steps button .dot.w{background:var(--amb)}.steps button .dot.e{background:var(--red)}
+.lay{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media(max-width:900px){.lay{grid-template-columns:minmax(0,1fr)}}
+aside.verdict{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px}
+@media(max-width:900px){aside.verdict{position:static;order:-1}}
+.stamp{border:3px solid var(--grn);color:var(--grn);border-radius:10px;padding:12px 14px;font:700 17px/1.25 "Inter Tight";transform:rotate(-1deg)}
+.stamp.w{border-color:var(--amb);color:var(--amb)}.stamp.e{border-color:var(--red);color:var(--red)}
+.terms{width:100%;border-collapse:collapse;font-size:14px}.terms td,.terms th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}.terms td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+.msg{font-size:13px;padding:7px 10px;border-radius:8px;border-left:4px solid var(--amb);background:light-dark(#fff8e1,#2c2716);margin:0 0 6px}
+.msg.e{border-color:var(--red);background:light-dark(#fdecea,#321b19)}.msg.ok{border-color:var(--grn);background:light-dark(#e8f6ef,#15281f)}
+.calc{font-variant-numeric:tabular-nums;font-weight:600}
+table.t{width:100%;border-collapse:collapse;font-size:14px}table.t th,table.t td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}table.t th{color:var(--mut);font-weight:600;font-size:12px}
+table.t td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.item{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--card)}
+.item .hd{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.vn{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.vn button{border:0;background:var(--card);color:var(--mut);font:700 13px Inter;width:40px;min-height:36px;cursor:pointer}
+.vn button.on.V{background:var(--grn);color:#fff}.vn button.on.N{background:var(--red);color:#fff}.vn button.on.X{background:var(--mut);color:var(--bg)}
+.cl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.cl .ref{font-size:12px;color:var(--mut)}.cl input{grid-column:1/-1;min-height:36px;font-size:14px;padding:6px 9px}
+.cl .hint{font-size:12px;font-weight:600}
+.book td,.book th{white-space:nowrap}.book td.w{white-space:normal}
+.empty{padding:40px 10px;text-align:center;color:var(--mut)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:9;transition:opacity .3s}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:8;padding:16px}
+.dlg .card{max-width:440px;width:100%}
+.scroll{overflow-x:auto}
+.small{font-size:12px;color:var(--mut)}
+@media(max-width:600px){table.stack thead{display:none}table.stack tr{display:grid;padding-block:8px;border-bottom:1px solid var(--line)}table.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8.5em;text-align:start}table.stack td::before{content:attr(data-l);float:inline-start;width:8em;margin-inline-start:-8.5em;color:var(--mut);font-size:12px}table.stack td:empty{display:none}}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Revízie<b>PRO</b></h1>
+  <span class="small" style="color:#aab1b8">OPaOS odberných plynových zariadení · TPP 704 01 – R1</span>
+  <nav class="main" id="nav">
+    <button data-v="book" class="on">Kniha správ</button>
+    <button data-v="edit">Správa</button>
+    <button data-v="set">Nastavenia</button>
+  </nav>
+</header>
+<main id="app"></main>
+<div id="dlg"></div>
+<script>
+{
+/* ================= DATA & STORAGE ================= */
+const LS='reviziepro.v1';
+let DB=null,UID=null;
+const store={
+  data:{settings:null,reports:[]},
+  async load(){
+    try{const x=JSON.parse(localStorage.getItem(LS)||'null');if(x)this.data=x}catch(e){}
+    if(!this.data.settings)this.data.settings=defSettings();
+  },
+  saveLocal(){try{localStorage.setItem(LS,JSON.stringify(this.data))}catch(e){}},
+  async save(){
+    this.saveLocal();
+    if(DB&&UID){try{await DB.collection('data/users/'+UID).doc('state').set({json:JSON.stringify(this.data),ts:Date.now()})}catch(e){}}
+  }
+};
+let saveT=null;const saveSoon=()=>{clearTimeout(saveT);saveT=setTimeout(()=>store.save(),600)};
+
+function defSettings(){return{
+  rt:{meno:'Adrián Kramer',firma:'EGMONT s.r.o.',adresa:'Hviezdoslavova 7, 078 01 Sečovce',ico:'46727710',osv:'165/3/12 - PZ - A - Bf, g1, g2, g3, h1, h2',rozsah:['A','Bf','Bg','Bh'],ap:'',miesto:'Sečovce',opr:''},
+  meradla:[
+    {nazov:'Analyzátor spalín',typ:'Testo 330-1',vc:'',kl:'',kd:''},
+    {nazov:'Digitálny tlakomer',typ:'Testo 510',vc:'',kl:'',kd:''},
+    {nazov:'Skúšobné zariadenie',typ:'Pressotest 200',vc:'',kl:'',kd:''},
+    {nazov:'Detektor plynu',typ:'',vc:'',kl:'',kd:''},
+    {nazov:'Detektor CO',typ:'',vc:'',kl:'',kd:''}],
+  pena:'',
+  cnt:{}
+}}
+
+const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+const today=()=>new Date().toISOString().slice(0,10);
+
+function newReport(){
+  const s=store.data.settings,y=new Date().getFullYear();
+  s.cnt[y]=(s.cnt[y]||0)+1;
+  return{id:uid(),no:y+'-'+String(s.cnt[y]).padStart(3,'0'),created:Date.now(),
+    druh:'per_opos',kontrola:'prevadzka',lehota:'pril10',dovod:'',od:today(),do:'',vyhot:today(),
+    prev:{meno:'',adresa:'',ico:'',zast:''},
+    obj:{obec:'',ulica:'',cp:'',byt:'',posch:'',supc:'',parc:'',ku:'',typ:'RD'},
+    druhZar:'Rozvod plynu v rodinnom dome s plynovým spotrebičom',predmet:'OPZ NTL – od HUP po spotrebiče',
+    zatr:{Bf:false,Bg:true,Bh:true,Ca:false},spotrSucast:true,
+    pIn:'',mop:'2,1',zucastnil:'',poslOS:'',
+    rozvod:{popis:'',useky:[{mat:'ocel',dn:'DN25',di:27.2,l:''},{mat:'ocel',dn:'DN20',di:21.6,l:''},{mat:'ocel',dn:'DN15',di:16,l:''}],hup:'',rtp:'nie je osadený – NTL sieť',rtpTyp:'',plynomer:'',korozia:'',pospaj:'vykonané',armat:'',bru:''},
+    rooms:[],spot:[],
+    mer:{tes:'',co:'',coTrv:false,fun:'',o2:'',coS:'',co2:'',lam:'',eta:'',tsp:'',tah:'',dp:'',pV:'',psch:false,
+      fun2:{prev:'',plam1:'',plam2:'',voda:'',manP:'',manV:'',tPrev:'',tHav:''},protNast:''},
+    tlak:{robi:false,typ:'obe',mont:'',montOpr:'',stav:'nový',dovod:'nový',datum:today(),medium:'vzduch',pP:'',pT:'',p1P:'',p2P:'',t1P:'',t2P:'',p1T:'',p2T:'',t1T:'',t2T:'',meradlo:'',okP:'',okT:'',arm:'',pozn:''},
+    nap:{on:false,dovod:'',kedy:'',kto:''},
+    cl:{},ned:[],predch:'',ostatne:'',doklady:'Uvedené v kontrolnom zozname (list 4, časť 1).',foto:false,
+    uprava:'',nahl:'',zaverMan:'',vytl:'3',rozdel:'2× prevádzkovateľ, 1× RT',pozn:''}
+}
+
+/* ================= HELPERS ================= */
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>{if(v===''||v==null)return NaN;return parseFloat(String(v).replace(/\s/g,'').replace(',','.'))};
+const fmt=(v,d=2)=>isFinite(v)?v.toLocaleString('sk-SK',{maximumFractionDigits:d,minimumFractionDigits:0}):'–';
+const dsk=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d?`${+d}. ${+m}. ${y}`:s};
+const gp=(o,p)=>p.split('.').reduce((a,k)=>a==null?a:a[k],o);
+const sp=(o,p,v)=>{const ks=p.split('.');let a=o;ks.slice(0,-1).forEach(k=>{if(a[k]==null)a[k]={};a=a[k]});a[ks.at(-1)]=v};
+function termin(dateStr,years){if(!dateStr)return'';const d=new Date(dateStr+'T12:00');const t=new Date(d.getFullYear()+years,d.getMonth()+1,0);return String(t.getMonth()+1).padStart(2,'0')+'/'+t.getFullYear()}
+function termMonths(dateStr,months){if(!dateStr)return'';const d=new Date(dateStr+'T12:00');const t=new Date(d.getFullYear(),d.getMonth()+months+1,0);return String(t.getMonth()+1).padStart(2,'0')+'/'+t.getFullYear()}
+function addDays(s,n){if(!s)return'';const d=new Date(s+'T12:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.append(e);setTimeout(()=>{e.style.opacity=0;setTimeout(()=>e.remove(),400)},1800)}
+
+/* ================= TABLES ================= */
+const MAT={
+  ocel:{n:'oceľ (závitová, STN 42 5710)',d:{DN15:16.0,DN20:21.6,DN25:27.2,DN32:35.9,DN40:41.8,DN50:53.0}},
+  cu:{n:'meď',d:{'15×1':13,'18×1':16,'22×1':20,'28×1,5':25,'35×1,5':32,'42×1,5':39}},
+  pe:{n:'PE SDR11',d:{'d32':26.0,'d40':32.6,'d50':40.8,'d63':51.4}},
+  vl:{n:'iný / vlnovec / viacvrstvové',d:{}}
+};
+const TAB6={a:{n:'a) sporák / zostava varná doska + rúra',I:20,II:50},b:{n:'b) samostatná rúra / varič s 2 horákmi',I:10,II:30},c:{n:'c) plynová chladnička',I:6,II:6},d:{n:'d) ohrievač vody do 10 kW / zásobník do 2 kW',I:20,II:50},ea:{n:'e) ohrievač do 10 kW + sporák (a)',I:26,II:80},ebc:{n:'e) ohrievač do 10 kW + rúra/varič/chladnička (b, c)',I:20,II:60}};
+const ZHOT={A:'A – bez odvodu spalín',Batm:'B – atmosférický horák s prerušovačom ťahu',Bven:'B – s ventilátorom (bez prerušovača ťahu)',C:'C – uzavretý (turbo / kondenzačný C)'};
+const RDRUH={kuch:'kuchyňa',obyt:'iná obytná miestnosť',spal:'spálňa',kup:'kúpeľňa / sprcha',wc:'WC',spajza:'špajza / sklad potravín',chodba:'spoločná chodba / schodisko / úniková cesta',tech:'kotolňa / technická miestnosť',gar:'garáž',nebyt:'nebytový priestor',zhrom:'zhromaždisko osôb'};
+const DRUH={vych:'východisková OP a OS',per_op:'periodická OP',per_opos:'periodická OP a OS',oprava:'OS po oprave / rekonštrukcii',opat:'pred opätovným uvedením do prevádzky',mimo:'mimoriadna'};
+
+/* ================= CALCULATIONS ================= */
+function vol(r){return r.rozvod.useky.reduce((s,u)=>{const L=num(u.l),d=num(u.di);return s+(isFinite(L)&&isFinite(d)?Math.PI/4*d*d*L/1000:0)},0)}
+function pressTest(r){
+  const mop=num(r.mop),V=vol(r);
+  const pP=isFinite(mop)?Math.max(2.5*mop,5):NaN;
+  const dur=V>50?30:15;
+  const kor=(p1,t1,t2)=>{p1=num(p1);t1=num(t1);t2=num(t2);if(![p1,t1,t2].every(isFinite))return NaN;return(t2+273.15)/(t1+273.15)*(p1+101.325)-101.325};
+  return{mop,V,pP,dur,korP:kor(r.tlak.p1P,r.tlak.t1P,r.tlak.t2P),korT:kor(r.tlak.p1T,r.tlak.t1T,r.tlak.t2T)}
+}
+function psch(r){const dp=num(r.mer.dp),V=isFinite(num(r.mer.pV))?num(r.mer.pV):vol(r);if(!isFinite(dp)||!(V>0))return null;const x=dp*V;
+  return x<=2400?{x,k:0,t:'≤ 1 l/h – plynovod možno ďalej prevádzkovať'}:x<=12200?{x,k:1,t:'1–5 l/h – oprava / utesnenie do 30 dní'}:{x,k:2,t:'> 5 l/h – netesný, odstaviť'}}
+function roomChecks(r){
+  const out=[];
+  r.rooms.forEach(rm=>{
+    const L=num(rm.d),W=num(rm.s),H=num(rm.v),V=[L,W,H].every(isFinite)?L*W*H:num(rm.vol);
+    const sp=r.spot.filter(s=>s.room===rm.id);if(!sp.length)return;
+    const res={rm,V,msgs:[],st:0};const add=(t,k)=>{res.msgs.push({t,k});res.st=Math.max(res.st,k)};
+    if(isFinite(H)&&H<2.3)add(`Svetlá výška ${fmt(H)} m < 2,3 m (čl. 12.2.9) – nad spotrebičom účinné odvetranie, do objemu len časť ≥ 2,3 m.`,1);
+    const nebyt=['nebyt','zhrom','gar','tech'].includes(rm.druh)||r.obj.typ==='nebyt';
+    const A=sp.filter(s=>s.zhot==='A'),Ba=sp.filter(s=>s.zhot==='Batm'),Bv=sp.filter(s=>s.zhot==='Bven'),C=sp.filter(s=>s.zhot==='C');
+    if(rm.druh==='chodba'&&sp.length)add('Spotrebič na spoločnej chodbe / schodisku / únikovej ceste – zakázané (čl. 12.10.1).',2);
+    if(rm.druh==='zhrom'&&(A.length||Ba.length||Bv.length))add('Zhromaždisko osôb – len spotrebiče zhotovenia C (čl. 12.10.1, 13.1.3).',2);
+    if(rm.druh==='gar'){if(A.length||Ba.length||Bv.length)add('Garáž – len vykurovací spotrebič zhotovenia C (čl. 13.4).',2);else add('Garáž – overiť: povrch ≤ 300 °C, ochrana pred vozidlom, spodná hrana ≥ 0,5 m, pripojenie napevno / hadica s uzáverom 70 °C (čl. 13.4).',0)}
+    if(A.length){
+      if(['kup','wc','spajza'].includes(rm.druh))add('Zhotovenie A v kúpeľni / WC / špajzi – zakázané (čl. 12.2.4).',2);
+      if(rm.druh==='spal'&&rm.byt!=='II')add('Zhotovenie A v spálni – zakázané (čl. 12.2.4 c), okrem bytu s jednou obytnou miestnosťou).',2);
+      if(!rm.priamo)add('Zhotovenie A musí byť aspoň v priamo vetrateľnom priestore (čl. 12.2.3).',2);
+      let req,kwA=A.reduce((s,x)=>s+(num(x.prikon)||0),0);
+      if(nebyt)req=5*kwA;else req=A.reduce((s,x)=>s+(TAB6[x.t6]?TAB6[x.t6][rm.byt==='II'?'II':'I']:0),0);
+      if(nebyt&&rm.nutVetr)req*=0.5;
+      if(!nebyt&&rm.ods)req*=0.75;
+      if(isFinite(V)&&req>0){
+        if(V>=req)add(`Zhotovenie A: objem ${fmt(V,1)} m³ ≥ požadovaných ${fmt(req,1)} m³ (${nebyt?'čl. 13.2: 5 m³/kW':'tab. 6'}${rm.ods&&!nebyt?', −25 % odsávač':''}).`,0);
+        else{const Vp=num(rm.prepV),ot=num(rm.otvor),need=Math.max(10*kwA,200);
+          const ok=rm.prep&&V>=10&&isFinite(Vp)&&V+Vp>=1.3*req&&(rm.dvere||ot>=need)&&rm.prepPriamo;
+          add(ok?`Zhotovenie A: vlastný objem ${fmt(V,1)} m³ < ${fmt(req,1)} m³, vyhovuje prepojením podľa čl. 12.2.7 (spolu ${fmt(V+Vp,1)} m³ ≥ 1,3 × ${fmt(req,1)}).`
+            :`Zhotovenie A: objem ${fmt(V,1)} m³ < požadovaných ${fmt(req,1)} m³ – nevyhovuje (tab. 6 / čl. 13.2). Prepojenie podľa 12.2.7: ≥ 10 m³, spolu ≥ ${fmt(1.3*req,1)} m³, otvory ≥ ${fmt(need,0)} cm² pri podlahe a ≥ 1,8 m, obe priamo vetrateľné.`,ok?0:2)}
+      }
+      if(kwA>15&&A.some(x=>x.bezPoistky))add('Varné horáky bez poistiek plameňa > 15 kW – len s vetracím zariadením (čl. 12.2.3).',1);
+      A.filter(x=>x.t6==='d'&&num(x.prikon)>10).forEach(()=>add('Prietokový ohrievač A nad 10 kW – nevyhovuje (čl. 12.2.8).',2));
+    }
+    if(Ba.length){
+      const P=Ba.reduce((s,x)=>s+(num(x.prikon)||0),0);
+      if(rm.podtlak)add('Atmosférický horák v miestnosti s možným podtlakom (digestor, ventilátor) – nevyhovuje (čl. 12.5.5, 13.3.2).',2);
+      if(rm.druh==='kup')add(`Kúpeľňa: dvere otváravé von s prívodom vzduchu pri podlahe (čl. 12.5.3)${nebyt?'; v nebytových ≥ 20 m³ a ochrana pred vodou (čl. 13.3.1)':''}.`,1);
+      let k=1;if(!rm.priamo&&P>7&&Ba.some(x=>!x.poistka))k=2;
+      let req=k*P;if(nebyt&&rm.druh==='kup')req=Math.max(req,20);
+      const Vc=rm.priamo?V:(isFinite(num(rm.prepV))?num(rm.prepV):NaN);
+      const need=Math.max(10*P,200),ot=num(rm.otvor);
+      const sol=(rm.otvorVon&&ot>=need)||(rm.prep&&(rm.dvere||ot>=need))||rm.vent||rm.skrina;
+      if(P>0&&isFinite(Vc)){
+        if(Vc>=req)add(`B atmosférický: ${fmt(Vc,1)} m³ ≥ ${fmt(req,1)} m³ (${k} m³/kW × ${fmt(P,1)} kW, čl. ${k===2?'12.5.4':'12.6.1'}${rm.priamo?'':'; počítaný objem susednej priamo vetrateľnej miestnosti – čl. 12.5.2'}). Prívod vzduchu ${fmt(1.6*P,1)} m³/h (čl. 12.6.2) – overiť škáry / otvory.`,0);
+        else add(sol?`B atmosférický: objem ${fmt(Vc,1)} m³ < ${fmt(req,1)} m³, riešené podľa čl. 12.6.3 (otvor ≥ ${fmt(need,0)} cm² / prepojenie / ventilátor / skriňa).`
+          :`B atmosférický: objem ${fmt(Vc,1)} m³ < ${fmt(req,1)} m³ a bez riešenia podľa čl. 12.6.3 – nevyhovuje. Potrebný otvor z vonku ≥ ${fmt(need,0)} cm² (10 cm²/kW, min. 200 cm²; potrubie +15 cm²/m).`,sol?0:2);
+      }
+    }
+    if(Bv.length){const P=Bv.reduce((s,x)=>s+(num(x.prikon)||0),0);add(`B s ventilátorom: objem sa nekontroluje (čl. 12.7); prívod vzduchu ${fmt(1.6*P,1)} m³/h – škáry alebo riešenie podľa 12.6.3.`,rm.podtlak?1:0)}
+    if(C.length&&!A.length&&!Ba.length&&!Bv.length)add('Zhotovenie C: bez požiadaviek na objem a prívod vzduchu (čl. 12.8); požiarna bezpečnosť, STN 92 0300.',0);
+    if(rm.oknaVym)add('Po výmene okien / stavebných úpravách vykonať posúdenie výmeny vzduchu (čl. 12.3.2, 12.9.3).',1);
+    out.push(res)
+  });
+  return out
+}
+
+/* ================= CHECKLIST (príloha H + kap. 12/13) ================= */
+const CL=[
+ ['1','Dokumentácia','sd','Sprievodná dokumentácia – vzťahuje sa na zariadenie, náležitosti podľa príl. 3','§ 8 písm. a) vyhl. 508/2009'],
+ ['1','Dokumentácia','ev','Evidencia zariadenia – náležitosti podľa príl. 4','§ 8 písm. b) vyhl. 508/2009'],
+ ['1','Dokumentácia','riz','Posúdenie rizík podľa prevádzkových podmienok','§ 9 ods. 2 písm. d) vyhl. 508/2009'],
+ ['1','Dokumentácia','pop','Predchádzajúca správa z OP plynového zariadenia','§ 9 vyhl. 508/2009'],
+ ['1','Dokumentácia','pos','Predchádzajúca správa z OS plynového zariadenia','§ 9 vyhl. 508/2009'],
+ ['1','Dokumentácia','tlz','Správa z OS tlakového zariadenia (napr. expanzná nádoba)','§ 9 vyhl. 508/2009',r=>r.zatr.Bh],
+ ['1','Dokumentácia','elz','Správa z OS elektrického zariadenia','§ 9 vyhl. 508/2009',r=>r.zatr.Bh||r.zatr.Bf],
+ ['1','Dokumentácia','nav','Návody na obsluhu (kotol, horák, regulátor…)','§ 6 ods. 1 písm. i) zák. 124/2006'],
+ ['1','Dokumentácia','obs','Doklad obsluhy PZ (pri kotle V. tr. kuričský preukaz)','§ 16 zák. 124/2006',r=>r.zatr.Bh],
+ ['1','Dokumentácia','den','Prevádzkový denník / doklady o údržbe','čl. 14, 15 STN 38 6405'],
+ ['1','Dokumentácia','srv','Doklad o servise spotrebiča a kvalifikácia servisného technika','čl. 10.2.1.2, 10.2.2.2 TPP 704 01',r=>r.zatr.Bh],
+ ['1','Dokumentácia','kom','Záznam o kontrole a čistení komína / dymovodu','vyhl. 401/2007; čl. 10.2.3.3 TPP',r=>r.spot.some(s=>s.zhot!=='A')],
+ ['2a','Prehliadka – rozvod plynu','sul','Súlad rozvodu so sprievodnou dokumentáciou','§ 13 ods. 2 zák. 124/2006',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','plv','Vonkajší a vnútorný plynovod – upevnenie, ochrana, označenie, vodivé prepojenie, prechodky','čl. 4.3, 4.6, 5.1 STN EN 1775; čl. 6 TPP',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','spo','Spoje (lisované / rozoberateľné) vo vetraných a prístupných priestoroch','čl. 5.2 STN EN 1775; čl. 6.6 TPP',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','pre','Prechody cez steny / stropy, chráničky, nie v dutinách','čl. 5.3 STN EN 1775; čl. 6.2.3, 6.5 TPP',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','uza','Uzávery – poloha O/Z, prístupnosť, pred meradlom, spotrebičom, stúpačkou, odbočkou','čl. 5.5 STN EN 1775; čl. 5.7, 5.8 TPP',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','pps','Protipožiarna / nadprietoková poistka (ak je súčasťou)','čl. 5.3.5 TPP',r=>r.zatr.Bg],
+ ['2a','Prehliadka – rozvod plynu','kor','Ochrana proti korózii, vodivé prepojenie plynomera','čl. 6.4, 10.2.3.1 TPP; TPP 934 01',r=>r.zatr.Bg],
+ ['2b','Prehliadka – regulácia tlaku','rum','Umiestnenie a kontrola regulátorov, štítky DRZ','čl. 5.6 STN EN 1775; čl. 5.4, 10.2.3.2 TPP',r=>r.zatr.Bf||!/nie je/.test(r.rozvod.rtp)],
+ ['2b','Prehliadka – regulácia tlaku','rst','Stav regulátorov, vetranie skrinky, nápisy','čl. 10.2.3.2 TPP',r=>r.zatr.Bf||!/nie je/.test(r.rozvod.rtp)],
+ ['2c','Prehliadka – spaľovanie plynu','spk','Kontrola spotrebiča (vizuálne)','čl. 10.2.3.3 TPP',r=>r.spot.length],
+ ['2c','Prehliadka – spaľovanie plynu','spt','Označenie spotrebiča – štítok','čl. 10.2.3.3 TPP',r=>r.spot.length],
+ ['2c','Prehliadka – spaľovanie plynu','spp','Pripojenie na domový plynovod (STN EN 14800 / 1762; bezpečnostná hadica)','čl. 11.2 TPP',r=>r.spot.length],
+ ['2c','Prehliadka – spaľovanie plynu','spu','Upevnenie plynového spotrebiča','čl. 11.3 TPP',r=>r.spot.length],
+ ['2c','Prehliadka – spaľovanie plynu','umi','Umiestnenie spotrebiča – objem, prívod vzduchu, výška, zákazy','čl. 12, 13 TPP',r=>r.spot.length,'room'],
+ ['2c','Prehliadka – spaľovanie plynu','pla','Stabilita horenia plameňa','čl. 10.2.3.3 TPP',r=>r.spot.length],
+ ['2c','Prehliadka – spaľovanie plynu','oko','Okolie plynových kotlov – poriadok, prístup','čl. 10.2.3.3 TPP',r=>r.zatr.Bh],
+ ['2c','Prehliadka – spaľovanie plynu','kot','Kotolňa (kotly do 50 kW v BD) – označenie, vetranie, detekcia, tlakomery, hasiace prístroje','čl. 10.2.3.3 TPP',r=>r.obj.typ==='BD'&&r.zatr.Bh],
+ ['2c','Prehliadka – spaľovanie plynu','kmn','Kontrola komína','vyhl. 401/2007',r=>r.spot.some(s=>s.zhot==='Batm'||s.zhot==='Bven')],
+ ['3a','Skúšanie – rozvod plynu','tsk','Zápis z tlakovej skúšky','kap. 7, 8, príl. D TPP',r=>r.tlak.robi,'press'],
+ ['3a','Skúšanie – rozvod plynu','tes','Kontrola tesnosti – detekcia únikov','čl. 10.2.1.3, 10.3, 10.4 TPP',null,'leak'],
+ ['3a','Skúšanie – rozvod plynu','psc','Skúška prevádzkyschopnosti (pri opakovaných únikoch)','čl. 10.6.4 TPP',r=>r.mer.psch,'psch'],
+ ['3a','Skúšanie – rozvod plynu','arm','Funkčnosť manometrov a armatúr','čl. 10.2.4.2 TPP',r=>r.zatr.Bg&&r.druh!=='per_op'],
+ ['3b','Skúšanie – regulácia tlaku','rkt','Kontrola regulátorov tlaku plynu','čl. 6.1 TPP 609 01; čl. 5 STN EN 12279',r=>(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))&&r.druh!=='per_op'],
+ ['3b','Skúšanie – regulácia tlaku','rrs','Tesnosť rozoberateľných spojov','čl. 6.1 TPP 609 01',r=>(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))&&r.druh!=='per_op'],
+ ['3b','Skúšanie – regulácia tlaku','rnu','Tesnosť pri nulovom odbere','čl. 6.1 TPP 609 01',r=>(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))&&r.druh!=='per_op'],
+ ['3b','Skúšanie – regulácia tlaku','rpv','Funkcia poistného ventilu','čl. 6.1 TPP 609 01',r=>(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))&&r.druh!=='per_op'],
+ ['3b','Skúšanie – regulácia tlaku','rbr','Bezpečnostný rýchlouzáver – funkčná skúška','čl. 8.2 STN EN 12279; čl. 10.2.4.2 TPP',r=>(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))&&r.druh!=='per_op'],
+ ['3c','Skúšanie – spotrebiče','sel','Správa z OP/OS elektrického zariadenia (pripojenie spotrebiča)','§ 9 vyhl. 508/2009',r=>r.zatr.Bh],
+ ['3c','Skúšanie – spotrebiče','stp','Skúška tesnosti pripojenia spotrebiča prevádzkovým tlakom','čl. 6.3 STN 38 6405; čl. 7.14 TPP',r=>r.spot.length],
+ ['3c','Skúšanie – spotrebiče','sfu','Funkčná skúška zabezpečovacích prvkov podľa výrobcu','čl. 10.2.1.4, 10.2.4.2 TPP',r=>r.zatr.Bh&&r.druh!=='per_op'],
+ ['3c','Skúšanie – spotrebiče','san','Analýza spalín pri vstupe do komína / dymovodu','čl. 10.2.4.2 TPP; STN 38 6405',r=>r.zatr.Bh&&r.druh!=='per_op'&&r.spot.some(s=>s.zhot!=='A')],
+ ['3c','Skúšanie – spotrebiče','sco','Ovzdušie – CO v priestore spotrebičov','čl. 10.2.1.3 TPP; čl. 61 STN 38 6405',r=>r.spot.length,'co'],
+];
+const clItems=r=>CL.filter(c=>!c[5]||c[5](r));
+function clHint(r,c){
+  if(c[6]==='room'){const rc=roomChecks(r);if(!rc.length)return null;const m=Math.max(...rc.map(x=>x.st));return m===2?['N','výpočet: nevyhovuje']:m===1?['','výpočet: s upozornením']:['V','výpočet: vyhovuje']}
+  if(c[6]==='press'){const t=r.tlak;if(t.okP==='nie'||t.okT==='nie')return['N','tlaková skúška: nevyhovela'];if(t.okP==='áno'||t.okT==='áno')return['V','tlaková skúška: vyhovela'];return null}
+  if(c[6]==='leak'){if(r.mer.tes==='unik')return['N','zistený únik'];if(r.mer.tes==='ok')return['V','bez úniku'];return null}
+  if(c[6]==='psch'){const p=psch(r);if(!p)return null;return[p.k?'N':'V',p.t]}
+  return null
+}
+
+/* ================= VERDICT & WARNINGS ================= */
+function analyse(r){
+  const s=store.data.settings,w=[];const W=(t,k=1,step)=>w.push({t,k,step});
+  const req=[['prev.meno','Prevádzkovateľ',1],['od','Dátum vykonania',1],['obj.obec','Obec objektu',1]];
+  req.forEach(([p,n,st])=>{if(!gp(r,p))W(`Chýba povinný údaj: ${n}.`,1,st)});
+  const roz=s.rt.rozsah||[];
+  [['Bf','Bf'],['Bg','Bg'],['Bh','Bh']].forEach(([k,c])=>{if(r.zatr[k]&&!roz.includes(c))W(`Zatriedenie ${k} nie je v rozsahu osvedčenia RT – správu nevydávať.`,2,1)});
+  s.meradla.forEach(m=>{if(m.kd&&r.od&&m.kd<r.od)W(`Kalibrácia „${m.nazov} ${m.typ}“ platila do ${dsk(m.kd)} – pred dátumom OPaOS.`,2,4)});
+  if(s.rt.ap&&r.od&&s.rt.ap<r.od)W('Aktualizačná odborná príprava RT je po platnosti.',2,0);
+  const N1=r.ned.some(n=>n.kat==='N1'&&!n.odstr);const ps=psch(r);
+  const rc=roomChecks(r);const roomBad=rc.some(x=>x.st===2);
+  if(r.mer.tes==='unik'&&!r.ned.some(n=>n.kat))W('Zistený únik, ale v nedostatkoch nie je kategória úniku (v budove vždy N1).',2,6);
+  if(roomBad&&!r.ned.length)W('Kontrola umiestnenia spotrebiča nevyhovuje – doplň nedostatok.',1,6);
+  clItems(r).forEach(c=>{if(r.cl[c[2]]?.v==='N'&&!r.ned.some(n=>n.cl===c[2]))W(`Položka „${c[3]}“ je N – chýba v nedostatkoch.`,1,6)});
+  const pt=pressTest(r);
+  if(r.tlak.robi){const pP=num(r.tlak.pP),pT=num(r.tlak.pT);
+    if(isFinite(pP)&&isFinite(pt.pP)&&pP<pt.pP-1e-9)W(`Skúšobný tlak pevnosti ${fmt(pP)} kPa < ${fmt(pt.pP)} kPa (čl. 7.7).`,2,5);
+    if(isFinite(pT)&&(pT>15||(isFinite(pt.mop)&&pT<pt.mop)))W('Skúšobný tlak tesnosti mimo rozsahu MOP – 15 kPa (čl. 7.8).',2,5)}
+  if(r.mer.co&&num(r.mer.co)>0)W(`V ovzduší nameraný CO ${r.mer.co} ppm – posúdiť podľa výrobcu detektora / čl. 61 STN 38 6405.`,1,4);
+  let z;
+  if(r.zaverMan)z=+r.zaverMan;
+  else if(N1||ps?.k===2||r.ned.some(n=>n.vaz==='ohroz'&&!n.odstr)||(r.mer.tes==='unik'&&!r.ned.some(n=>n.kat)))z=2;
+  else if(r.ned.some(n=>!n.odstr)||ps?.k===1||(roomBad&&!r.ned.length)||clItems(r).some(c=>r.cl[c[2]]?.v==='N'&&!r.ned.some(n=>n.cl===c[2])))z=1;else z=0;
+  return{w,z,rc,ps,pt,N1}
+}
+const ZAVER=['Zariadenie je schopné bezpečnej a spoľahlivej prevádzky.','Zariadenie je schopné bezpečnej a spoľahlivej prevádzky po odstránení nedostatkov uvedených v technickej správe, bod C, v určených termínoch.','Zariadenie NIE JE schopné bezpečnej a spoľahlivej prevádzky.'];
+function terms(r){
+  const d=r.od,os=r.druh!=='per_op',base=os?d:(r.poslOS||'');const t=[];
+  if(r.zatr.Bg)t.push(['Rozvod B g',termin(d,3),base?termin(base,6):'–']);
+  if(r.zatr.Bf)t.push(['Regulácia B f',termin(d,1),base?termin(base,3):'–']);
+  if(r.zatr.Bh&&r.spotrSucast)t.push(['Spotrebiče B h',termin(d,1),base?termin(base,3):'–']);
+  if(r.zatr.Ca)t.push(['Spotrebiče < 5 kW (C a)',termin(d,3),'podľa TPV']);
+  return t
+}
+
+/* ================= STATE / VIEWS ================= */
+let view='book',cur=null,step=0,q='';
+const STEPS=['Základ','Rozvod','Miestnosti a spotrebiče','Merania','Prístroje','Tlaková skúška','Kontrolný zoznam a nedostatky','Záver a tlač'];
+const $=s=>document.querySelector(s);
+const app=$('#app');
+function go(v){view=v;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));render()}
+function rep(){return store.data.reports.find(x=>x.id===cur)}
+
+function F(path,label,o={}){const r=o.obj||rep();const v=gp(r,path)??'';const id='f_'+path.replace(/\./g,'_')+(o.sfx||'');
+  const req=o.req?' class="req"':'';const cls=o.w2?' w2':'';const attr=`id="${id}" data-k="${esc(path)}"${o.scope?` data-s="${o.scope}"`:''}`;
+  if(o.sel)return`<label class="f${cls}" for="${id}"><span${req}>${label}</span><select ${attr}>${Object.entries(o.sel).map(([k,n])=>`<option value="${esc(k)}"${String(v)===k?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  if(o.ta)return`<label class="f${cls}" for="${id}"><span${req}>${label}</span><textarea ${attr} placeholder="${esc(o.ph||'')}">${esc(v)}</textarea></label>`;
+  return`<label class="f${cls}" for="${id}"><span${req}>${label}</span><input ${attr} type="${o.t||'text'}" value="${esc(v)}" placeholder="${esc(o.ph||'')}"${o.im?` inputmode="${o.im}"`:''}></label>`}
+function C(path,label,o={}){const r=o.obj||rep();return`<label class="chk"><input type="checkbox" data-k="${esc(path)}"${o.scope?` data-s="${o.scope}"`:''}${gp(r,path)?' checked':''}> ${label}</label>`}
+
+function render(){
+  if(view==='book')return renderBook();
+  if(view==='set')return renderSet();
+  if(!rep()){view='book';return renderBook()}
+  renderEdit()
+}
+
+function renderBook(){
+  const rs=store.data.reports.filter(r=>!q||JSON.stringify([r.no,r.prev.meno,r.obj.obec,r.obj.ulica,r.obj.cp]).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>(b.od||'').localeCompare(a.od||'')||b.created-a.created);
+  app.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:14px">
+    <h2 style="margin:0">Kniha správ</h2>
+    <div class="row"><input id="q" type="search" placeholder="Hľadať meno, obec, číslo…" value="${esc(q)}" style="width:260px"><button class="btn pri" id="new">+ Nová správa</button></div></div>
+  <div class="card scroll">${rs.length?`<table class="t book stack"><thead><tr><th>Číslo</th><th>Dátum</th><th>Prevádzkovateľ</th><th>Objekt</th><th>Druh</th><th>Záver</th><th>Ďalšia OP</th><th></th></tr></thead><tbody>${rs.map(r=>{const a=analyse(r),t=terms(r);const nx=t.map(x=>x[1]).filter(Boolean).sort((x,y)=>x.split('/').reverse().join('').localeCompare(y.split('/').reverse().join('')))[0]||'–';
+    return`<tr><td><b>${esc(r.no)}</b></td><td>${dsk(r.od)}</td><td class="w">${esc(r.prev.meno||'—')}</td><td class="w">${esc([r.obj.ulica,r.obj.cp,r.obj.obec].filter(Boolean).join(' '))}</td><td class="w">${esc(DRUH[r.druh])}</td><td><span style="color:var(--${['grn','amb','red'][a.z]});font-weight:700">${['schopné','po odstránení','NIE JE schopné'][a.z]}</span></td><td>${nx}</td>
+    <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-open="${r.id}">Otvoriť</button><button class="btn sm" data-dup="${r.id}" title="Nová periodická správa z tejto">Ďalšia revízia</button><button class="btn sm dan" data-del="${r.id}">Zmazať</button></div></td></tr>`}).join('')}</tbody></table>`
+    :`<div class="empty"><h3>Zatiaľ žiadne správy</h3><p>Začni tlačidlom „Nová správa“. Pri ďalšej revízii toho istého objektu použi „Ďalšia revízia“ – prenesie objekt, rozvod, spotrebiče a otvorené nedostatky.</p></div>`}</div>
+  <div class="row" style="margin-top:14px"><button class="btn" id="exp">Záloha (JSON)</button><label class="btn" for="imp">Obnoviť zo zálohy</label><input id="imp" type="file" accept=".json,application/json" hidden><span class="small" id="stor"></span></div>`;
+  $('#stor').textContent=DB?'Dáta sa ukladajú do tvojho súkromného úložiska artefaktu (dostupné na všetkých zariadeniach) aj v prehliadači.':'Dáta sa ukladajú v tomto prehliadači. Pravidelne si rob zálohu.';
+}
+
+function renderSet(){
+  const s=store.data.settings,o={obj:s,scope:'set'};
+  app.innerHTML=`<h2>Nastavenia revízneho technika</h2>
+  <div class="card"><div class="grid">
+   ${F('rt.meno','Meno revízneho technika',o)}${F('rt.firma','Firma',o)}${F('rt.adresa','Adresa',{...o,w2:1})}${F('rt.ico','IČO',o)}
+   ${F('rt.osv','Číslo a rozsah osvedčenia',{...o,w2:1})}${F('rt.ap','Aktualizačná príprava platná do',{...o,t:'date'})}${F('rt.miesto','Miesto vyhotovenia správ',o)}
+   ${F('rt.opr','Č. oprávnenia organizácie (ak RT ako zamestnávateľ)',o)}
+  </div>
+  <h3>Rozsah osvedčenia (kontrola zatriedenia)</h3><div class="row">${['A','Bf','Bg','Bh','Ca'].map(k=>`<label class="chk"><input type="checkbox" data-roz="${k}"${s.rt.rozsah.includes(k)?' checked':''}> ${k}</label>`).join('')}</div></div>
+  <h3>Meradlá</h3><div class="card scroll"><table class="t stack"><thead><tr><th>Názov</th><th>Typ</th><th>Výr. č.</th><th>Kalibračný list</th><th>Kalibrácia do</th><th></th></tr></thead><tbody>
+   ${s.meradla.map((m,i)=>`<tr>${['nazov','typ','vc','kl'].map(k=>`<td data-l="${k}"><input data-s="set" data-k="meradla.${i}.${k}" value="${esc(m[k])}"></td>`).join('')}<td><input type="date" data-s="set" data-k="meradla.${i}.kd" value="${esc(m.kd)}"></td><td><button class="btn sm dan" data-mdel="${i}">×</button></td></tr>`).join('')}
+  </tbody></table><button class="btn sm" id="madd" style="margin-top:8px">+ Meradlo</button></div>
+  <div class="grid" style="margin-top:14px">${F('pena','Penotvorný prostriedok (výrobca, typ, STN EN 14291)',{...o,w2:1})}</div>
+  <p class="small" style="margin-top:16px">Číslovanie správ: rok-poradové číslo. Ďalšie číslo v ${new Date().getFullYear()}: ${new Date().getFullYear()}-${String((s.cnt[new Date().getFullYear()]||0)+1).padStart(3,'0')}.</p>`
+}
+
+function stepState(r,a){const st=Array(STEPS.length).fill(0);a.w.forEach(x=>{if(x.step!=null)st[x.step]=Math.max(st[x.step],x.k)});return st}
+
+function renderEdit(){
+  const r=rep(),a=analyse(r),ss=stepState(r,a);
+  app.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Správa č. ${esc(r.no)}</h2><span class="small">${esc(r.prev.meno||'')} ${esc(r.obj.obec||'')}</span></div>
+  <div class="steps" id="steps">${STEPS.map((n,i)=>`<button data-step="${i}" class="${i===step?'on':''}"><span class="dot ${ss[i]===2?'e':ss[i]===1?'w':''}"></span>${i+1}. ${n}</button>`).join('')}</div>
+  <div class="lay"><section id="form" class="card">${stepHTML(r,step)}</section><aside class="verdict" id="verdict"></aside></div>
+  <div class="row" style="margin-top:14px;justify-content:space-between"><button class="btn" id="prev"${step?'':' disabled'}>← Späť</button><button class="btn pri" id="next">${step<STEPS.length-1?'Ďalej →':'Pripraviť tlač'}</button></div>`;
+  renderVerdict()
+}
+function renderVerdict(){
+  const r=rep();if(!r||view!=='edit')return;const a=analyse(r);const el=$('#verdict');if(!el)return;
+  const t=terms(r);
+  el.innerHTML=`<div class="card"><div class="small" style="margin-bottom:8px">Celkové zhodnotenie${r.zaverMan?' (ručne)':' (automaticky)'}</div><div class="stamp ${['','w','e'][a.z]}">${ZAVER[a.z]}</div>
+   <table class="terms" style="margin-top:12px"><tr><th>Ďalšia</th><th>OP</th><th>OS</th></tr>${t.map(x=>`<tr><td>${x[0]}</td><td class="n">${x[1]||'–'}</td><td class="n">${x[2]}</td></tr>`).join('')}</table>
+   ${r.druh==='per_op'&&!r.poslOS?'<p class="small">Termín OS: zadaj dátum poslednej OS (krok 1).</p>':''}</div>
+  <div class="card"><div class="small" style="margin-bottom:8px">Výpočty</div>
+   <div>Geometrický objem: <span class="calc">${fmt(a.pt.V,1)} l</span></div>
+   <div>Skúška pevnosti: <span class="calc">≥ ${fmt(a.pt.pP)} kPa</span>, ${a.pt.dur} min</div>
+   <div>Skúška tesnosti: <span class="calc">${fmt(a.pt.mop)} – 15 kPa</span></div>
+   ${a.ps?`<div>Prevádzkyschopnosť: <span class="calc">Δp·V = ${fmt(a.ps.x,0)}</span> → ${a.ps.t}</div>`:''}</div>
+  <div>${a.w.length?a.w.map(x=>`<p class="msg ${x.k===2?'e':''}">${esc(x.t)}</p>`).join(''):'<p class="msg ok">Bez upozornení.</p>'}</div>`
+}
+
+function stepHTML(r,i){
+  const pt=pressTest(r);
+  if(i===0)return`<h3 style="margin-top:0">Druh a lehota</h3><div class="grid">
+    ${F('druh','Druh OPaOS',{sel:DRUH,req:1})}${F('kontrola','Druh kontroly',{sel:{pred:'pred uvedením do prevádzky',prevadzka:'počas prevádzky OPZ'}})}
+    ${F('lehota','Vykonaná v lehote',{sel:{pril10:'podľa príl. 10 vyhl. 508/2009',riz:'podľa § 9 ods. 2 písm. d) – posúdenie rizika',na:'netýka sa (východisková, po oprave…)'},w2:1})}
+    ${F('od','Dátum vykonania (od)',{t:'date',req:1})}${F('do','do (ak viac dní)',{t:'date'})}${F('vyhot','Dátum vyhotovenia',{t:'date'})}
+    ${r.druh==='per_op'?F('poslOS','Dátum poslednej OS (pre termín OS)',{t:'date'}):''}
+    ${F('dovod','Dôvod',{w2:1,ph:'periodická lehota / pripojenie k distribučnej sieti / rekonštrukcia'})}</div>
+   <h3>Prevádzkovateľ</h3><div class="grid">${F('prev.meno','Meno / obchodné meno',{req:1})}${F('prev.adresa','Adresa / sídlo',{w2:1})}${F('prev.ico','IČO')}${F('prev.zast','Zastúpený (správca, SVB)')}${F('zucastnil','Za prevádzkovateľa sa zúčastnil')}</div>
+   <h3>Objekt</h3><div class="grid">${F('obj.typ','Typ objektu',{sel:{RD:'rodinný dom',BD:'bytový dom',byt:'byt',nebyt:'nebytový priestor'}})}${F('obj.obec','Obec',{req:1})}${F('obj.ulica','Ulica')}${F('obj.cp','Č. p. (č. orient.)')}${F('obj.byt','Č. bytu')}${F('obj.posch','Poschodie')}${F('obj.supc','Súpisné č.')}${F('obj.parc','Parcelné č.')}${F('obj.ku','Katastrálne územie')}</div>
+   <h3>Zariadenie</h3><div class="grid">${F('druhZar','Druh zariadenia',{w2:1})}${F('predmet','Predmet a rozsah OPaOS',{w2:1})}</div>
+   <div class="row" style="margin-top:10px">${C('zatr.Bf','B f – regulácia v DRZ')}${C('zatr.Bg','B g – rozvod plynu')}${C('zatr.Bh','B h – spotrebiče 5 kW – 0,5 MW')}${C('zatr.Ca','C a – spotrebiče < 5 kW')}</div>
+   ${C('spotrSucast','Spotrebiče sú súčasťou OPaOS')}
+   <div class="grid">${F('pIn','Vstupný tlak (kPa)',{im:'decimal',ph:'napr. 90 pri STL'})}${F('mop','Prevádzkový tlak / MOP (kPa)',{im:'decimal',req:1})}</div>`;
+  if(i===1)return`<h3 style="margin-top:0">Úseky rozvodu</h3><p class="small">Vnútorný priemer sa doplní podľa materiálu a DN; dá sa prepísať.</p>
+   <div class="scroll"><table class="t stack"><thead><tr><th>Materiál</th><th>DN / rozmer</th><th>Vnútorný Ø mm</th><th>Dĺžka m</th><th>Objem l</th><th></th></tr></thead><tbody>
+   ${r.rozvod.useky.map((u,j)=>{const V=Math.PI/4*num(u.di)**2*num(u.l)/1000;return`<tr><td data-l="Materiál"><select data-k="rozvod.useky.${j}.mat" data-re="1">${Object.entries(MAT).map(([k,m])=>`<option value="${k}"${u.mat===k?' selected':''}>${m.n}</option>`).join('')}</select></td>
+   <td data-l="DN">${Object.keys(MAT[u.mat].d).length?`<select data-k="rozvod.useky.${j}.dn" data-dn="${j}">${Object.keys(MAT[u.mat].d).map(k=>`<option${u.dn===k?' selected':''}>${k}</option>`).join('')}</select>`:`<input data-k="rozvod.useky.${j}.dn" value="${esc(u.dn)}">`}</td>
+   <td data-l="Ø mm"><input data-k="rozvod.useky.${j}.di" value="${esc(u.di)}" inputmode="decimal"></td><td data-l="Dĺžka m"><input data-k="rozvod.useky.${j}.l" value="${esc(u.l)}" inputmode="decimal"></td><td class="n calc" data-l="Objem l">${isFinite(V)?fmt(V,2):'–'}</td><td><button class="btn sm dan" data-udel="${j}">×</button></td></tr>`}).join('')}
+   </tbody></table></div><div class="row" style="margin-top:8px"><button class="btn sm" id="uadd">+ Úsek</button><b>Spolu: <span class="calc">${fmt(vol(r),2)} l</span></b></div>
+   <h3>Popis a komponenty</h3><div class="grid">${F('rozvod.popis','Popis trasy (od HUP po spotrebiče)',{ta:1,w2:1,ph:'pripojenie, HUP, skrinka plynomeru, trasa, uloženie, prechody v chráničkách, uzávery'})}
+   ${F('rozvod.hup','HUP – typ, DN, umiestnenie')}${F('rozvod.rtp','Regulátor tlaku (RTP / DRZ)')}${F('rozvod.rtpTyp','Regulátor – typ, výr. č., Qmax')}${F('rozvod.bru','Rýchlouzáver / poistný ventil')}${F('rozvod.plynomer','Plynomer – typ, výr. č., Qmax')}${F('rozvod.korozia','Ochrana proti korózii')}${F('rozvod.pospaj','Vodivé prepojenie / pospájanie')}${F('rozvod.armat','Osadené armatúry',{ph:'GK DN25 – 2 ks, GK DN15 – 2 ks'})}</div>`;
+  if(i===2)return`<h3 style="margin-top:0">Miestnosti</h3><p class="small">Každý spotrebič priraď k miestnosti – aplikácia skontroluje objem, prívod vzduchu, výšku a zákazy podľa kap. 12 a 13 TPP.</p>
+   ${r.rooms.map((m,j)=>{const o={obj:r};const P='rooms.'+j+'.';return`<div class="item"><div class="hd"><b>${esc(m.nazov||'Miestnosť '+(j+1))}</b><button class="btn sm dan" data-rdel="${j}">Odstrániť</button></div><div class="grid">
+    ${F(P+'nazov','Názov',o)}${F(P+'druh','Druh',{...o,sel:RDRUH})}${F(P+'byt','Typ bytu (tab. 6)',{...o,sel:{I:'I – viac obytných miestností',II:'II – jedna obytná miestnosť'}})}
+    ${F(P+'d','Dĺžka m',{...o,im:'decimal'})}${F(P+'s','Šírka m',{...o,im:'decimal'})}${F(P+'v','Svetlá výška m',{...o,im:'decimal'})}${F(P+'vol','alebo objem m³ (nepravidelná)',{...o,im:'decimal'})}
+    ${F(P+'otvor','Voľný prierez otvorov cm²',{...o,im:'decimal'})}${F(P+'prepV','Objem prepojenej miestnosti m³',{...o,im:'decimal'})}</div>
+    <div class="row">${C(P+'priamo','priamo vetrateľná (okno von)',o)}${C(P+'ods','odsávač pár s odvodom von',o)}${C(P+'podtlak','možný podtlak (digestor, ventilátor)',o)}${C(P+'otvorVon','trvalý otvor z vonkajšieho priestoru',o)}${C(P+'prep','prepojená so susednou miestnosťou',o)}${C(P+'dvere','dvere trvalo odstránené',o)}${C(P+'prepPriamo','susedná je priamo vetrateľná',o)}${C(P+'vent','nútený prívod vzduchu viazaný na spotrebič',o)}${C(P+'skrina','spotrebič v skrini so samostatným prívodom',o)}${C(P+'nutVetr','nútené vetranie 1,5 m³/h·kW (nebytové)',o)}${C(P+'oknaVym','vymenené okná / stavebné úpravy',o)}</div></div>`}).join('')}
+   <button class="btn sm" id="radd">+ Miestnosť</button>
+   <h3>Spotrebiče</h3>
+   ${r.spot.map((x,j)=>{const o={obj:r};const P='spot.'+j+'.';return`<div class="item"><div class="hd"><b>${j+1}. ${esc(x.druh||'Spotrebič')} ${esc(x.typ||'')}</b><button class="btn sm dan" data-sdel="${j}">Odstrániť</button></div><div class="grid">
+    ${F(P+'druh','Druh',{...o,ph:'kotol / sporák / ohrievač'})}${F(P+'typ','Výrobca, typ',o)}${F(P+'vc','Výr. č.',o)}${F(P+'rok','Rok výroby',o)}
+    ${F(P+'vykon','Výkon kW',{...o,im:'decimal'})}${F(P+'prikon','Príkon kW',{...o,im:'decimal'})}${F(P+'zhot','Zhotovenie',{...o,sel:ZHOT})}
+    ${x.zhot==='A'?F(P+'t6','Kategória podľa tab. 6',{...o,sel:Object.fromEntries(Object.entries(TAB6).map(([k,v])=>[k,v.n]))}):''}
+    ${F(P+'room','Miestnosť',{...o,sel:{'':'—',...Object.fromEntries(r.rooms.map((m,k)=>[m.id,m.nazov||'Miestnosť '+(k+1)]))}})}
+    ${F(P+'odvod','Odvod spalín',{...o,ph:'do komína / koaxiálne cez stenu'})}${F(P+'prip','Pripojenie',{...o,ph:'napevno / hadica STN EN 14800'})}</div>
+    <div class="row">${x.zhot==='Batm'?C(P+'poistka','má automatickú poistku proti spätnému toku spalín',o):''}${x.zhot==='A'?C(P+'bezPoistky','varné horáky bez poistiek plameňa',o):''}</div></div>`}).join('')}
+   <button class="btn sm" id="sadd">+ Spotrebič</button>
+   <h3>Vyhodnotenie umiestnenia</h3>${roomChecks(r).map(x=>`<p style="margin:8px 0 4px"><b>${esc(x.rm.nazov||'Miestnosť')}</b> – ${isFinite(x.V)?fmt(x.V,1)+' m³':'objem nezadaný'}</p>${x.msgs.map(m=>`<p class="msg ${m.k===2?'e':m.k===0?'ok':''}">${esc(m.t)}</p>`).join('')}`).join('')||'<p class="small">Pridaj miestnosť a priraď k nej spotrebič.</p>'}`;
+  if(i===3){const p=psch(r);return`<h3 style="margin-top:0">Tesnosť a ovzdušie (čl. 10.2.1.3)</h3><div class="grid">
+    ${F('mer.tes','Skúška tesnosti všetkých častí v styku s plynom',{sel:{'':'—',ok:'bez úniku',unik:'zistený únik → nedostatok s kategóriou'},w2:1})}
+    ${F('mer.co','CO v ovzduší pri spotrebiči (ppm)',{im:'decimal'})}</div>${C('mer.coTrv','priestor má trvalý detektor CO')}
+   <h3>Analýza spalín (B h)</h3><div class="grid">${F('mer.o2','O₂ %',{im:'decimal'})}${F('mer.coS','CO ppm',{im:'decimal'})}${F('mer.co2','CO₂ %',{im:'decimal'})}${F('mer.lam','λ',{im:'decimal'})}${F('mer.eta','Účinnosť %',{im:'decimal'})}${F('mer.tsp','Teplota spalín °C',{im:'decimal'})}${F('mer.tah','Ťah Pa',{im:'decimal'})}</div>
+   <h3>Funkčná skúška zabezpečovacích prvkov</h3><div class="grid">${F('mer.fun2.prev','Prevetrávacia doba s')}${F('mer.fun2.plam1','Strážca plameňa – štart s')}${F('mer.fun2.plam2','Strážca plameňa – prevádzka s')}${F('mer.fun2.voda','Snímač tlaku vody kPa')}${F('mer.fun2.manP','Manostat plynu mbar')}${F('mer.fun2.manV','Manostat vzduchu mbar')}${F('mer.fun2.tPrev','Prevádzkový termostat °C')}${F('mer.fun2.tHav','Havarijný termostat °C')}${F('mer.fun','Výsledok funkčnej skúšky',{sel:{'':'—',V:'vyhovela',N:'nevyhovela'}})}${F('mer.protNast','Protokol z nastavenia (servisný technik, dátum)',{w2:1})}</div>
+   <h3>Skúška prevádzkyschopnosti (čl. 10.6.4)</h3>${C('mer.psch','vykonaná (pri opakovaných únikoch)')}
+   ${r.mer.psch?`<div class="grid">${F('mer.dp','Pokles tlaku Δp (Pa/min)',{im:'decimal'})}${F('mer.pV','Objem meranej časti V (l)',{im:'decimal',ph:fmt(vol(r),1)+' (z rozvodu)'})}</div>${p?`<p class="msg ${['ok','','e'][p.k]}">Δp·V = ${fmt(p.x,0)} → ${esc(p.t)}</p>`:''}`:''}`}
+  if(i===4){const s=store.data.settings;return`<h3 style="margin-top:0">Použité meracie prístroje</h3><p class="small">Upravuje sa v Nastaveniach – do správy sa prenesú všetky s vyplneným typom.</p>
+   <div class="scroll"><table class="t stack"><thead><tr><th>Názov</th><th>Typ</th><th>Výr. č.</th><th>Kalibračný list</th><th>Platná do</th></tr></thead><tbody>${s.meradla.map(m=>`<tr><td data-l="Názov">${esc(m.nazov)}</td><td data-l="Typ">${esc(m.typ)}</td><td data-l="Výr. č.">${esc(m.vc)}</td><td data-l="List">${esc(m.kl)}</td><td data-l="Do" style="color:${m.kd&&r.od&&m.kd<r.od?'var(--red)':'inherit'}">${dsk(m.kd)}</td></tr>`).join('')}</tbody></table></div>
+   <p>Penotvorný prostriedok: ${esc(s.pena||'—')}</p><button class="btn sm" data-go="set">Upraviť meradlá</button>`}
+  if(i===5)return`${C('tlak.robi','Súčasťou je tlaková skúška – vyhotoviť list 3 (zápis podľa prílohy D)')}
+   ${r.tlak.robi?`<div class="grid">${F('tlak.typ','Skúška',{sel:{obe:'pevnosti a tesnosti (súčasne, čl. 7.13)',pevnost:'pevnosti',tesnost:'tesnosti'}})}${F('tlak.datum','Dátum skúšky',{t:'date'})}${F('tlak.mont','Montážna organizácia (názov, sídlo, IČO)',{w2:1})}${F('tlak.montOpr','Číslo oprávnenia')}
+    ${F('tlak.stav','Plynovod',{sel:{'nový':'nový','rekonštruovaný':'rekonštruovaný','rozširovaný':'rozširovaný','opravovaný':'opravovaný','existujúci':'existujúci'}})}
+    ${F('tlak.dovod','Dôvod skúšky (čl. 7.3 / 7.4)',{sel:{'nový':'nový plynovod','> 3 m':'rekonštrukcia / predĺženie > 3 m','≤ 3 m':'rekonštrukcia / predĺženie ≤ 3 m','zásah':'zásah s porušením tesnosti','> 6 mes.':'> 6 mesiacov mimo prevádzky','utesnenie':'dodatočné utesnenie','podozrenie':'podozrenie na poškodenie'}})}
+    ${F('tlak.medium','Skúšobné médium',{sel:{vzduch:'vzduch','dusík':'dusík (N₂)','distribuovaný plyn':'distribuovaný plyn (len tesnosť)'}})}${F('tlak.meradlo','Meradlo (typ, výr. č.)')}</div>
+    <p class="msg ok">Predpísané: pevnosť ≥ ${fmt(pt.pP)} kPa · tesnosť ${fmt(pt.mop)} – 15 kPa · ustálenie 15 min · trvanie ${pt.dur} min (V = ${fmt(pt.V,1)} l).</p>
+    ${r.tlak.typ!=='tesnost'?`<h3>Skúška pevnosti</h3><div class="grid">${F('tlak.pP','Skúšobný tlak kPa',{im:'decimal',ph:fmt(pt.pP)})}${F('tlak.p1P','Tlak na začiatku kPa',{im:'decimal'})}${F('tlak.p2P','Tlak na konci kPa',{im:'decimal'})}${F('tlak.t1P','Teplota začiatok °C',{im:'decimal'})}${F('tlak.t2P','Teplota koniec °C',{im:'decimal'})}${F('tlak.okP','Vyhovela',{sel:{'':'—','áno':'áno','nie':'nie'}})}</div>${isFinite(pt.korP)?`<p class="small">Korigovaný tlak na konci (čl. 7.10): <b>${fmt(pt.korP,3)} kPa</b>${isFinite(num(r.tlak.p2P))?(num(r.tlak.p2P)+1e-9>=pt.korP?' – bez poklesu':' – pokles tlaku!'):''}</p>`:''}`:''}
+    ${r.tlak.typ!=='pevnost'?`<h3>Skúška tesnosti</h3><div class="grid">${F('tlak.pT','Skúšobný tlak kPa',{im:'decimal'})}${F('tlak.p1T','Tlak na začiatku kPa',{im:'decimal'})}${F('tlak.p2T','Tlak na konci kPa',{im:'decimal'})}${F('tlak.t1T','Teplota začiatok °C',{im:'decimal'})}${F('tlak.t2T','Teplota koniec °C',{im:'decimal'})}${F('tlak.okT','Vyhovela',{sel:{'':'—','áno':'áno','nie':'nie'}})}</div>${isFinite(pt.korT)?`<p class="small">Korigovaný tlak na konci: <b>${fmt(pt.korT,3)} kPa</b>${isFinite(num(r.tlak.p2T))?(num(r.tlak.p2T)+1e-9>=pt.korT?' – bez poklesu':' – pokles tlaku!'):''}</p>`:''}`:''}
+    <div class="grid" style="margin-top:10px">${F('tlak.pozn','Poznámky',{ta:1,w2:1})}</div>`:''}
+   <h3>Zápis o napustení plynu (príloha E)</h3>${C('nap.on','Vyhotoviť list 5 – zápis o napustení plynu a odvzdušnení')}
+   ${r.nap.on?`<div class="grid">${F('nap.kto','Meno a funkcia zodpovedného pracovníka')}${F('nap.kedy','Dátum a hodina napustenia',{t:'datetime-local'})}${F('nap.dovod','Dôvod prerušenia dodávky a na aký čas',{ta:1,w2:1})}</div>`:''}`;
+  if(i===6){const items=clItems(r);let last='';return`<h3 style="margin-top:0">Kontrolný zoznam (príloha H)</h3><p class="small">V = vyhovel · N = nevyhovel · – = netýka sa. Položky sa zobrazujú podľa zatriedenia a druhu OPaOS. Pri „N“ sa ponúkne nedostatok.</p>
+   ${items.map(c=>{const v=r.cl[c[2]]||{};const h=clHint(r,c);const head=c[1]!==last?`<h3>${esc(c[1])}</h3>`:'';last=c[1];
+     return head+`<div class="cl"><div>${esc(c[3])}<div class="ref">${esc(c[4])}${h?` · <span class="hint" style="color:var(--${h[0]==='N'?'red':h[0]==='V'?'grn':'amb'})">${esc(h[1])}</span>`:''}</div></div>
+     <div class="vn" role="group">${['V','N','X'].map(k=>`<button class="${k}${v.v===k?' on':''}" data-cl="${c[2]}" data-cv="${k}" aria-pressed="${v.v===k}">${k==='X'?'–':k}</button>`).join('')}</div>
+     <input data-k="cl.${c[2]}.p" value="${esc(v.p||'')}" placeholder="doplňujúce informácie"></div>`}).join('')}
+   <div class="row" style="margin-top:10px"><button class="btn sm" id="clfill">Doplniť z výpočtov a ostatné ako V</button></div>
+   <h3>Zistené nedostatky (technická správa, bod C)</h3>
+   ${r.ned.map((n,j)=>{const P='ned.'+j+'.';const o={obj:r};return`<div class="item"><div class="hd"><b>${j+1}.</b><button class="btn sm dan" data-ndel="${j}">Odstrániť</button></div><div class="grid">
+    ${F(P+'popis','Nedostatok (popis, miesto, foto č.)',{...o,ta:1,w2:1})}${F(P+'rozpor','Rozpor s (predpis / článok)',o)}
+    ${F(P+'kat','Kategória úniku (TPP 702 13)',{...o,sel:{'':'– (nie únik)',N1:'N1 – v budove vždy',N2:'N2',N3:'N3',A1:'A1',A2:'A2',B:'B',C:'C'}})}
+    ${F(P+'vaz','Závažnosť',{...o,sel:{bez:'s termínom odstránenia',ohroz:'bezprostredne ohrozuje – odstaviť'}})}
+    ${F(P+'opatrenie','Opatrenie',{...o,w2:1})}${F(P+'termin','Termín odstránenia',{...o,t:'date'})}${F(P+'nahl','Nahlásené (komu, kedy, č. hlásenia)',o)}</div>${C(P+'odstr','odstránené počas OPaOS',o)}</div>`}).join('')||'<p class="small">Bez nedostatkov.</p>'}
+   <button class="btn sm" id="nadd">+ Nedostatok</button>
+   ${r.ned.some(n=>n.kat)?`<p class="msg e">Únik: v budove vždy N1 – uzavrieť HUP / najbližšiu armatúru, informovať prevádzkovateľa, zotrvať do odvrátenia nebezpečenstva. HUP, meradlo, RTP → poruchová linka PDS (č. plynomera / POD). Únik 1–5 l/h → oprava do 30 dní.</p>`:''}`}
+  if(i===7){const a=analyse(r);return`<h3 style="margin-top:0">Záver</h3><div class="grid">${F('zaverMan','Celkové zhodnotenie',{sel:{'':'automaticky podľa nedostatkov',0:'schopné',1:'schopné po odstránení nedostatkov',2:'NIE JE schopné'},w2:1})}
+    ${F('uprava','Návrh úpravy lehoty (§ 9 ods. 2 písm. d)',{w2:1,ph:'nenavrhuje sa'})}</div>
+   <h3>Ďalšie časti správy</h3><div class="grid">${F('predch','D – nedostatky z predchádzajúcich OP a OS',{ta:1,w2:1,ph:'v predchádzajúcej správe neboli zistené nedostatky / východisková – netýka sa'})}
+   ${F('ostatne','E – záznam o ostatných správach (elektro, tlakové, komín)',{ta:1,w2:1})}${F('doklady','F – doklady predložené k OS',{w2:1})}${F('pozn','Poznámka do správy',{ta:1,w2:1})}
+   ${F('vytl','Počet výtlačkov')}${F('rozdel','Rozdeľovník')}</div>${C('foto','Súčasťou je fotodokumentácia')}
+   <h3>Tlač</h3><p class="small">Pripraví listy 1–4${r.nap.on?' a 5':''} na A4. ${inFrame()?'Tu v okne Claude sa tlač nedá spustiť priamo – stiahne sa tlačový súbor, otvor ho a daj Ctrl+P → Uložiť ako PDF.':'Otvorí sa tlačové okno – zvoľ „Uložiť ako PDF“.'}</p>
+   ${a.w.some(x=>x.k===2)?'<p class="msg e">Správa má chyby (červené upozornenia vpravo). Pred vydaním ich odstráň.</p>':''}
+   <div class="row"><button class="btn pri" id="print">Tlačiť / PDF</button><button class="btn" id="preview">Náhľad</button></div><div id="pv" style="margin-top:14px"></div>`}
+}
+
+/* ================= PRINT ================= */
+function inFrame(){try{return window.self!==window.top}catch(e){return true}}
+function printHTML(r){
+  const s=store.data.settings,a=analyse(r),t=terms(r),rt=s.rt,pt=a.pt;const E=esc;
+  const adr=[r.obj.ulica,r.obj.cp,r.obj.obec].filter(Boolean).join(' ');
+  const zat=Object.entries({Bf:'B f',Bg:'B g',Bh:'B h',Ca:'C a'}).filter(([k])=>r.zatr[k]).map(x=>x[1]).join(', ');
+  const dat=dsk(r.od)+(r.do&&r.do!==r.od?' – '+dsk(r.do):'');
+  const head=(n,title)=>`<div class="ph"><div><b>${E(rt.firma)}</b>, ${E(rt.adresa)}, IČO ${E(rt.ico)}</div><div>Správa č. <b>${E(r.no)}</b> · list ${n}</div></div><h1>${title}</h1>`;
+  const sig=`<div class="sig"><div>V ${E(rt.miesto)} dňa ${dsk(r.vyhot)}</div><div class="line">Prevádzkovateľ (prevzal)</div><div class="line">${E(rt.meno)}, revízny technik<br>č. osv. ${E(rt.osv)}<br>podpis, pečiatka</div></div>`;
+  const ok=v=>v==='V'?'V':v==='N'?'N':v==='X'?'–':'';
+  const rc=a.rc;
+  let h=`<section>${head(1,'SPRÁVA o odbornej prehliadke a odbornej skúške plynového zariadenia')}<p class="c">podľa § 9 vyhlášky MPSVR SR č. 508/2009 Z. z. v znení neskorších predpisov; náležitosti podľa prílohy I TPP 704 01 – R1</p>
+  <table class="k"><tr><th>Evidenčné číslo správy</th><td>${E(r.no)}</td><th>Dátum vykonania</th><td>${dat}</td></tr>
+  <tr><th>Druh</th><td>${E(DRUH[r.druh])}</td><th>Druh kontroly</th><td>${r.kontrola==='pred'?'pred uvedením do prevádzky':'počas prevádzky odberného plynového zariadenia'}</td></tr>
+  <tr><th>Vykonaná v lehote</th><td colspan="3">${{pril10:'podľa prílohy č. 10 vyhl. č. 508/2009 Z. z.',riz:'podľa § 9 ods. 2 písm. d) vyhl. č. 508/2009 Z. z. na základe posúdenia rizika podľa prevádzkových podmienok',na:'—'}[r.lehota]}</td></tr>
+  ${r.dovod?`<tr><th>Dôvod</th><td colspan="3">${E(r.dovod)}</td></tr>`:''}</table>
+  <table class="k"><tr><th style="width:50%">Prevádzkovateľ</th><th>Revízny technik</th></tr><tr><td>${E(r.prev.meno)}<br>${E(r.prev.adresa)}${r.prev.ico?'<br>IČO '+E(r.prev.ico):''}${r.prev.zast?'<br>zastúpený: '+E(r.prev.zast):''}<br><br><b>Miesto OPaOS:</b> ${E(adr)}${r.obj.byt?', byt č. '+E(r.obj.byt):''}${r.obj.supc?', súp. č. '+E(r.obj.supc):''}${r.obj.parc?', parc. č. '+E(r.obj.parc):''}${r.obj.ku?', k. ú. '+E(r.obj.ku):''}</td>
+  <td><b>${E(rt.meno)}</b>, ${E(rt.firma)}, ${E(rt.adresa)}, IČO ${E(rt.ico)}<br>Osvedčenie č. ${E(rt.osv)}${rt.ap?'<br>Aktualizačná príprava platná do '+dsk(rt.ap):''}${rt.opr?'<br>Č. oprávnenia organizácie: '+E(rt.opr):''}</td></tr></table>
+  <table class="k"><tr><th>Druh zariadenia</th><td colspan="3">${E(r.druhZar)}</td></tr><tr><th>Predmet a rozsah</th><td colspan="3">${E(r.predmet)}</td></tr>
+  <tr><th>Zatriedenie (príl. 1, IV. časť)</th><td>${zat}</td><th>Prevádzkový tlak</th><td>${r.pIn?E(r.pIn)+' / ':''}${E(r.mop)} kPa</td></tr>
+  <tr><th>Médium</th><td>zemný plyn</td><th>Výkon jedného spotrebiča</th><td>${r.spot.length&&r.spotrSucast?r.spot.map(x=>E(x.vykon||x.prikon)+' kW').join(', '):'spotrebiče nie sú súčasťou OPaOS'}</td></tr>
+  <tr><th>Za prevádzkovateľa sa zúčastnil</th><td colspan="3">${E(r.zucastnil)}</td></tr></table>
+  <h2>Celkové zhodnotenie</h2><p class="z">${ZAVER[a.z]}</p>${a.z===2&&r.ned.length?`<p>Dôvod: ${r.ned.filter(n=>!n.odstr&&(n.kat==='N1'||n.vaz==='ohroz')).map(n=>E(n.popis)).join('; ')||(a.ps?.k===2?E(a.ps.t):'')}</p>`:''}
+  <h2>Termín nasledovnej OP a OS</h2><table class="k"><tr><th></th><th>Odborná prehliadka</th><th>Odborná skúška</th></tr>${t.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${x[2]}</td></tr>`).join('')}</table>
+  <p>Návrh úpravy lehoty podľa § 9 ods. 2 písm. d) vyhl. 508/2009: ${E(r.uprava||'nenavrhuje sa')}</p>
+  <p>Súčasti správy: list 2 – technická správa${r.tlak.robi?', list 3 – zápis z tlakovej skúšky':''}, list 4 – kontrolný zoznam č. ${E(r.no)}${r.foto?', fotodokumentácia':''}. Výtlačky: ${E(r.vytl)} · Rozdeľovník: ${E(r.rozdel)}</p>
+  ${sig}<p class="sm">Správa je súčasťou technickej dokumentácie zariadenia (§ 9 ods. 4 vyhl. 508/2009). Prevádzkovateľ ju poskytuje PDS (zák. 251/2012). Každý zásah do častí v styku s plynom vyžaduje tlakovú skúšku a odbornú skúšku. Zásah medzi HUP a plynomerom len so súhlasom PDS. Servisná kontrola spotrebiča pred každou vykurovacou sezónou.</p></section>`;
+  h+=`<section>${head(2,'TECHNICKÁ SPRÁVA')}<p>k správe č. ${E(r.no)} zo dňa ${dat}</p>
+  <h2>A. Technické hodnoty zariadenia</h2><p>${E(r.rozvod.popis).replace(/\n/g,'<br>')}</p>
+  <table class="k"><tr><th>Druh plynu / prevádzkový tlak</th><td>zemný plyn, ${E(r.mop)} kPa</td></tr><tr><th>Úseky</th><td>${r.rozvod.useky.filter(u=>u.l).map(u=>`${E(MAT[u.mat]?.n.split(' (')[0])} ${E(u.dn)} – ${E(u.l)} m`).join('; ')}</td></tr>
+  <tr><th>Geometrický objem</th><td>${fmt(vol(r),1)} l</td></tr><tr><th>HUP</th><td>${E(r.rozvod.hup)}</td></tr><tr><th>Regulátor tlaku</th><td>${E(r.rozvod.rtp)} ${E(r.rozvod.rtpTyp)}</td></tr>
+  ${r.rozvod.bru?`<tr><th>Rýchlouzáver / poistný ventil</th><td>${E(r.rozvod.bru)}</td></tr>`:''}<tr><th>Plynomer</th><td>${E(r.rozvod.plynomer)}</td></tr><tr><th>Ochrana proti korózii</th><td>${E(r.rozvod.korozia)}</td></tr><tr><th>Vodivé prepojenie / pospájanie</th><td>${E(r.rozvod.pospaj)}</td></tr><tr><th>Armatúry</th><td>${E(r.rozvod.armat)}</td></tr></table>
+  ${r.spot.length?`<table class="k"><tr><th>#</th><th>Spotrebič</th><th>Výr. č.</th><th>Výkon / príkon kW</th><th>Zhotovenie</th><th>Miestnosť</th><th>Odvod spalín</th><th>Pripojenie</th></tr>${r.spot.map((x,j)=>{const m=r.rooms.find(q=>q.id===x.room);return`<tr><td>${j+1}</td><td>${E(x.druh)} ${E(x.typ)}</td><td>${E(x.vc)}${x.rok?' / '+E(x.rok):''}</td><td>${E(x.vykon)} / ${E(x.prikon)}</td><td>${E((ZHOT[x.zhot]||'').split(' –')[0])}</td><td>${m?E(m.nazov)+(rc.find(c=>c.rm.id===m.id)&&isFinite(rc.find(c=>c.rm.id===m.id).V)?', '+fmt(rc.find(c=>c.rm.id===m.id).V,1)+' m³':''):''}</td><td>${E(x.odvod)}</td><td>${E(x.prip)}</td></tr>`}).join('')}</table>`:''}
+  <h2>B. Údaje o meraniach a skúškach</h2><table class="k">
+  <tr><th>Skúška tesnosti všetkých častí v styku s plynom (čl. 10.2.1.3 TPP; čl. 63 STN 38 6405)</th><td>${{ok:'bez úniku',unik:'zistený únik – bod C'}[r.mer.tes]||''}</td></tr>
+  ${r.spot.length?`<tr><th>CO v ovzduší v priestore spotrebičov (čl. 61 STN 38 6405)</th><td>${r.mer.co!==''?E(r.mer.co)+' ppm':''}${r.mer.coTrv?' (trvalý detektor CO)':''}</td></tr>`:''}
+  ${r.mer.o2||r.mer.coS?`<tr><th>Analýza spalín</th><td>O₂ ${E(r.mer.o2)} %, CO ${E(r.mer.coS)} ppm, CO₂ ${E(r.mer.co2)} %, λ ${E(r.mer.lam)}, η ${E(r.mer.eta)} %, t ${E(r.mer.tsp)} °C${r.mer.tah?', ťah '+E(r.mer.tah)+' Pa':''}</td></tr>`:''}
+  ${r.mer.fun?`<tr><th>Funkčná skúška zabezpečovacích prvkov</th><td>${r.mer.fun==='V'?'vyhovela':'nevyhovela'} (podrobne list 4)</td></tr>`:''}
+  ${r.tlak.robi?`<tr><th>Tlaková skúška</th><td>list 3 – pevnosť ${E(r.tlak.okP||'—')}, tesnosť ${E(r.tlak.okT||'—')}</td></tr>`:''}
+  ${a.ps?`<tr><th>Skúška prevádzkyschopnosti (čl. 10.6.4)</th><td>Δp = ${E(r.mer.dp)} Pa/min, V = ${fmt(isFinite(num(r.mer.pV))?num(r.mer.pV):vol(r),1)} l, Δp·V = ${fmt(a.ps.x,0)} → ${E(a.ps.t)}</td></tr>`:''}
+  ${rc.map(x=>`<tr><th>Umiestnenie – ${E(x.rm.nazov)}</th><td>${x.msgs.map(m=>E(m.t)).join('<br>')}</td></tr>`).join('')}</table>
+  <p>Zariadenie ${a.z===2?'nevyhovelo':'vyhovelo'} vykonaným prehliadkam a skúškam podľa STN EN 1775, STN 38 6405 a TPP 704 01 – R1.</p>
+  <h2>C. Zistené nedostatky, návrh opatrení a termíny</h2>${r.ned.length?`<table class="k"><tr><th>#</th><th>Nedostatok</th><th>Rozpor s</th><th>Kat.</th><th>Opatrenie</th><th>Termín</th></tr>${r.ned.map((n,j)=>`<tr><td>${j+1}</td><td>${E(n.popis)}${n.odstr?' <i>(odstránené počas OPaOS)</i>':''}${n.nahl?'<br>Nahlásené: '+E(n.nahl):''}</td><td>${E(n.rozpor)}</td><td>${E(n.kat)}</td><td>${E(n.opatrenie)}${n.vaz==='ohroz'?'<br><b>bezprostredne ohrozuje – odstavené</b>':''}</td><td>${dsk(n.termin)}</td></tr>`).join('')}</table>`:'<p>Neboli zistené.</p>'}
+  <h2>D. Nedostatky z predchádzajúcich OP a OS</h2><p>${E(r.predch||(r.druh==='vych'?'Východisková OPaOS – netýka sa.':'')).replace(/\n/g,'<br>')}</p>
+  <h2>E. Záznam o ostatných správach z OP a OS</h2><p>${E(r.ostatne||'Na zariadení neboli vykonané iné OP a/alebo OS.').replace(/\n/g,'<br>')}</p>
+  <h2>F. Doklady predložené k OS</h2><p>${E(r.doklady)}</p>
+  <h2>Použité meracie prístroje</h2><table class="k"><tr><th>Názov</th><th>Typ</th><th>Výr. č.</th><th>Kalibračný list</th><th>Kalibrácia do</th></tr>${s.meradla.filter(m=>m.typ).map(m=>`<tr><td>${E(m.nazov)}</td><td>${E(m.typ)}</td><td>${E(m.vc)}</td><td>${E(m.kl)}</td><td>${dsk(m.kd)}</td></tr>`).join('')}${s.pena?`<tr><td>Penotvorný prostriedok</td><td colspan="4">${E(s.pena)}</td></tr>`:''}</table>
+  ${r.pozn?`<p>${E(r.pozn)}</p>`:''}<div class="sig"><div></div><div></div><div class="line">${E(rt.meno)}, revízny technik</div></div></section>`;
+  if(r.tlak.robi){const T=r.tlak;h+=`<section>${head(3,'ZÁPIS z tlakovej skúšky – skúšky '+(T.typ==='obe'?'pevnosti a tesnosti':T.typ==='pevnost'?'pevnosti':'tesnosti')+' odberného plynového zariadenia')}<p class="c">podľa kap. 7 a 8 TPP 704 01 – R1, vzor príloha D</p>
+  <table class="k"><tr><th>Objekt č. p. (č. orient.)</th><th>v</th><th>ulica</th><th>č. bytu</th><th>posch.</th></tr><tr><td>${E(r.obj.cp)}</td><td>${E(r.obj.obec)}</td><td>${E(r.obj.ulica)}</td><td>${E(r.obj.byt)}</td><td>${E(r.obj.posch)}</td></tr></table>
+  <table class="k"><tr><th>Odberateľ (názov a sídlo)</th><td>${E(r.prev.meno)}, ${E(r.prev.adresa)}</td></tr><tr><th>Montážna organizácia (názov a sídlo)</th><td>${E(T.mont)}</td></tr><tr><th>Číslo oprávnenia</th><td>${E(T.montOpr)}</td></tr><tr><th>Plynovod</th><td>${E(T.stav)} (dôvod: ${E(T.dovod)})</td></tr></table>
+  <h2>Technické hodnoty zariadenia</h2><table class="k"><tr><th>Dimenzia</th>${r.rozvod.useky.filter(u=>u.l).map(u=>`<td>${E(u.dn)}</td>`).join('')}</tr><tr><th>Dĺžka (m)</th>${r.rozvod.useky.filter(u=>u.l).map(u=>`<td>${E(u.l)}</td>`).join('')}</tr><tr><th>Geometrický objem (l)</th>${r.rozvod.useky.filter(u=>u.l).map(u=>`<td>${fmt(Math.PI/4*num(u.di)**2*num(u.l)/1000,2)}</td>`).join('')}</tr></table>
+  <p>Geometrický objem spolu: <b>${fmt(pt.V,1)} l</b> · Počet osadených armatúr: ${E(r.rozvod.armat)}</p>
+  <h2>Ďalšie údaje</h2><table class="k"><tr><th>Dátum vykonania skúšky</th><td>${dsk(T.datum)}</td></tr>${T.typ!=='tesnost'?`<tr><th>Trvanie skúšky pevnosti</th><td>${pt.dur} min (+ ustálenie 15 min)</td></tr>`:''}${T.typ!=='pevnost'?`<tr><th>Trvanie skúšky tesnosti</th><td>${pt.dur} min</td></tr>`:''}<tr><th>Skúšobné médium</th><td>${E(T.medium)}</td></tr></table>
+  <h2>Predpísaný skúšobný tlak</h2><table class="k">${T.typ!=='tesnost'?`<tr><th>skúška pevnosti (≥ 2,5 × MOP, min. 5 kPa)</th><td>${E(T.pP||fmt(pt.pP))} kPa</td></tr>`:''}${T.typ!=='pevnost'?`<tr><th>skúška tesnosti (≥ prevádzkový tlak, max. 15 kPa)</th><td>${E(T.pT)} kPa</td></tr>`:''}</table>
+  <h2>Priebeh skúšky</h2><table class="k"><tr><th></th>${T.typ!=='tesnost'?'<th>Pevnosť</th>':''}${T.typ!=='pevnost'?'<th>Tesnosť</th>':''}</tr>
+  <tr><th>Tlak na začiatku / na konci (kPa)</th>${T.typ!=='tesnost'?`<td>${E(T.p1P)} / ${E(T.p2P)}</td>`:''}${T.typ!=='pevnost'?`<td>${E(T.p1T)} / ${E(T.p2T)}</td>`:''}</tr>
+  <tr><th>Teplota začiatok / koniec (°C)</th>${T.typ!=='tesnost'?`<td>${E(T.t1P)} / ${E(T.t2P)}</td>`:''}${T.typ!=='pevnost'?`<td>${E(T.t1T)} / ${E(T.t2T)}</td>`:''}</tr>
+  <tr><th>Korigovaný tlak na konci (čl. 7.10)</th>${T.typ!=='tesnost'?`<td>${fmt(pt.korP,3)}</td>`:''}${T.typ!=='pevnost'?`<td>${fmt(pt.korT,3)}</td>`:''}</tr>
+  <tr><th>Meradlo</th><td colspan="2">${E(T.meradlo)}</td></tr></table>
+  <h2>Zariadenie vyhovelo predpísanému skúšobnému tlaku</h2><p>${T.typ!=='tesnost'?`pri skúške pevnosti: <b>${E(T.okP||'—')}</b>&nbsp;&nbsp;&nbsp;`:''}${T.typ!=='pevnost'?`pri skúške tesnosti: <b>${E(T.okT||'—')}</b>`:''}</p>
+  <p>Poznámky: ${E(T.pozn)}</p><div class="sig"><div></div><div class="line">Meno, číslo osvedčenia, podpis odborného pracovníka a pečiatka</div><div class="line">Prevzal / skontroloval: ${E(rt.meno)}, RT</div></div></section>`}
+  h+=`<section>${head(4,'KONTROLNÝ ZOZNAM č. '+E(r.no))}<p class="c">pre výkon odbornej prehliadky a odbornej skúšky počas prevádzky OPZ – príloha H TPP 704 01 – R1 · V = vyhovel, N = nevyhovel, – = netýka sa</p>
+  <h2>Základné technické údaje</h2><table class="k"><tr><th>Rozvod plynu</th><td>MOP ${E(r.mop)} kPa · skúšobný tlak ${fmt(pt.pP)} kPa · ${r.rozvod.useky.filter(u=>u.l).map(u=>E(u.dn)+' '+E(u.l)+' m').join(', ')} · ${E([...new Set(r.rozvod.useky.filter(u=>u.l).map(u=>MAT[u.mat]?.n.split(' (')[0]))].join(', '))} · zemný plyn</td></tr>
+  ${(r.zatr.Bf||!/nie je/.test(r.rozvod.rtp))?`<tr><th>Regulácia tlaku</th><td>${E(r.pIn)} / ${E(r.mop)} kPa · ${E(r.rozvod.rtpTyp)}</td></tr>`:''}
+  ${r.spot.map((x,j)=>`<tr><th>Spotrebič ${j+1}</th><td>${E(x.typ)} · ${E(x.vykon)} kW · výr. č. ${E(x.vc)}${x.rok?'/'+E(x.rok):''} · ${E(r.mop)} kPa · ${E(x.odvod)}</td></tr>`).join('')}</table>`;
+  let last='';clItems(r).forEach(c=>{const v=r.cl[c[2]]||{};if(c[1]!==last){if(last)h+='</table>';h+=`<h2>${E(c[1])}</h2><table class="k cl"><tr><th>Položka</th><th>Predpis</th><th>V/N</th><th>Doplňujúce informácie</th></tr>`;last=c[1]}
+    h+=`<tr><td>${E(c[3])}</td><td>${E(c[4])}</td><td class="vn">${ok(v.v)}</td><td>${E(v.p||'')}</td></tr>`});
+  h+='</table>';
+  const f=r.mer.fun2;if(Object.values(f).some(Boolean))h+=`<h2>Funkčná skúška – nastavené hodnoty</h2><table class="k"><tr><td>Prevetrávacia doba: ${E(f.prev)} s</td><td>Strážca plameňa štart / prevádzka: ${E(f.plam1)} / ${E(f.plam2)} s</td><td>Snímač tlaku vody: ${E(f.voda)} kPa</td></tr><tr><td>Manostat plynu: ${E(f.manP)} mbar</td><td>Manostat vzduchu: ${E(f.manV)} mbar</td><td>Termostat prevádzkový / havarijný: ${E(f.tPrev)} / ${E(f.tHav)} °C</td></tr>${r.mer.protNast?`<tr><td colspan="3">Protokol z nastavenia: ${E(r.mer.protNast)}</td></tr>`:''}</table>`;
+  h+=`<div class="sig"><div></div><div></div><div class="line">${E(rt.meno)}, revízny technik</div></div></section>`;
+  if(r.nap.on)h+=`<section>${head(5,'ZÁPIS o napustení plynu a odvzdušnení plynovodu')}<p class="c">podľa čl. 9.8 TPP 704 01 – R1, vzor príloha E</p><table class="k"><tr><th>Presné označenie objektu</th><td>${E(adr)}${r.obj.byt?', byt č. '+E(r.obj.byt):''}</td></tr><tr><th>Montážna organizácia</th><td>${E(r.tlak.mont)}</td></tr><tr><th>Meno a funkcia zodpovedného pracovníka</th><td>${E(r.nap.kto)}</td></tr><tr><th>Dôvod prerušenia dodávky a na aký čas</th><td>${E(r.nap.dovod)}</td></tr><tr><th>Dátum a hodina napustenia a odvzdušnenia</th><td>${E((r.nap.kedy||'').replace('T',' '))}</td></tr></table><div class="sig"><div></div><div class="line">Pracovník montážnej organizácie, pečiatka</div><div class="line">Majiteľ (správca) plynovodu, pečiatka</div></div></section>`;
+  return`<!DOCTYPE html><html lang="sk"><head><meta charset="utf-8"><title>Správa ${E(r.no)} – ${E(r.prev.meno)}</title><style>
+  @page{size:A4;margin:14mm 13mm}body{font:10.5pt/1.35 Arial,Helvetica,sans-serif;color:#000;margin:0}section{page-break-after:always}section:last-child{page-break-after:auto}
+  .ph{display:flex;justify-content:space-between;font-size:8.5pt;border-bottom:2px solid #000;padding-bottom:3px;margin-bottom:8px}h1{font-size:13.5pt;margin:6px 0 2px;text-align:center}h2{font-size:11pt;margin:10px 0 4px}
+  .c{text-align:center;font-size:9pt;margin:0 0 8px}table.k{width:100%;border-collapse:collapse;margin:4px 0 6px;page-break-inside:auto}table.k th,table.k td{border:1px solid #555;padding:3px 5px;text-align:left;vertical-align:top;font-size:9.5pt}table.k th{background:#eee;font-weight:600}
+  table.cl td.vn{text-align:center;font-weight:700;width:34px}tr{page-break-inside:avoid}.z{font-size:12pt;font-weight:700;border:2px solid #000;padding:6px 8px}.sm{font-size:8pt;color:#333;margin-top:10px}
+  .sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:22px;font-size:9pt}.sig .line{border-top:1px solid #000;padding-top:3px;margin-top:34px;text-align:center}
+  @media screen{body{background:#ddd}section{background:#fff;max-width:184mm;margin:10px auto;padding:12mm;box-shadow:0 1px 4px rgba(0,0,0,.3)}}
+  </style></head><body>${h}</body></html>`
+}
+async function doPrint(r){
+  const html=printHTML(r);
+  if(!inFrame()){const w=window.open('','_blank');if(w){w.document.write(html+'<script>onload=()=>print()<\/script>');w.document.close();return}}
+  const fn=`Sprava_${r.no}_${(r.prev.meno||'').replace(/[^\p{L}\p{N}]+/gu,'_')}.html`;
+  try{const dl=await claude.use('downloads');if(dl){await dl.save({filename:fn,data:html});toast('Tlačový súbor uložený – otvor a Ctrl+P → PDF');return}}catch(e){}
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download=fn;a.click();toast('Tlačový súbor stiahnutý')}catch(e){toast('Sťahovanie nie je dostupné – použi Náhľad')}
+}
+
+/* ================= EVENTS ================= */
+function setVal(el){
+  const path=el.dataset.k;if(!path)return;const scope=el.dataset.s==='set'?store.data.settings:rep();if(!scope)return;
+  const v=el.type==='checkbox'?el.checked:el.value;sp(scope,path,v);
+  if(el.dataset.dn!=null){const u=rep().rozvod.useky[+el.dataset.dn];u.di=MAT[u.mat].d[u.dn]??u.di}
+  if(/^rozvod\.useky\.\d+\.mat$/.test(path)){const u=gp(rep(),path.replace('.mat',''));const k=Object.keys(MAT[u.mat].d);u.dn=k[0]||'';u.di=MAT[u.mat].d[u.dn]??''}
+  saveSoon()
+}
+const REDRAW=/(^druh$|^zatr\.|^spotrSucast|^tlak\.(robi|typ)$|^nap\.on$|^mer\.psch$|^rozvod\.useky\.\d+\.(mat|dn)$|\.zhot$|^obj\.typ$|^rozvod\.rtp$)/;
+app.addEventListener('input',e=>{const el=e.target;if(!el.dataset.k)return;setVal(el);
+  if(view==='edit'){if(el.type!=='checkbox'&&el.tagName!=='SELECT'){renderVerdict();liveCalc()}}});
+app.addEventListener('change',e=>{const el=e.target;
+  if(el.dataset.roz){const s=store.data.settings.rt;s.rozsah=el.checked?[...new Set([...s.rozsah,el.dataset.roz])]:s.rozsah.filter(x=>x!==el.dataset.roz);saveSoon();return}
+  if(el.id==='imp'){const f=el.files[0];if(!f)return;f.text().then(t=>{const d=JSON.parse(t);if(!d.reports||!d.settings)throw 0;store.data=d;store.save();toast('Obnovené zo zálohy');render()}).catch(()=>toast('Súbor nie je záloha ReviziePRO'));return}
+  if(!el.dataset.k)return;if(el.type==='checkbox'||el.tagName==='SELECT')setVal(el);
+  if(view==='edit'){if(REDRAW.test(el.dataset.k)||el.type==='checkbox'||el.tagName==='SELECT'){const y=scrollY;const id=el.id;renderEdit();scrollTo(0,y);if(id){const n=document.getElementById(id);n&&n.focus({preventScroll:true})}}else renderVerdict()}
+});
+function liveCalc(){if(step===1){const t=document.querySelectorAll('#form tbody tr');rep().rozvod.useky.forEach((u,j)=>{const V=Math.PI/4*num(u.di)**2*num(u.l)/1000;const c=t[j]?.querySelector('td.calc');if(c)c.textContent=isFinite(V)?fmt(V,2):'–'});const s=document.querySelector('#form b .calc');if(s)s.textContent=fmt(vol(rep()),2)+' l'}}
+app.addEventListener('input',e=>{if(e.target.id==='q'){q=e.target.value;const p=e.target.selectionStart;renderBook();const n=$('#q');n.focus();n.setSelectionRange(p,p)}});
+app.addEventListener('click',e=>{
+  const b=e.target.closest('button,[data-go]');if(!b)return;const d=b.dataset;const r=rep();
+  const re=()=>{saveSoon();const y=scrollY;renderEdit();scrollTo(0,y)};
+  if(b.id==='new'){const n=newReport();store.data.reports.push(n);cur=n.id;step=0;saveSoon();go('edit');return}
+  if(d.open){cur=d.open;step=0;go('edit');return}
+  if(d.dup){const o=store.data.reports.find(x=>x.id===d.dup);const n=newReport();const keep=JSON.parse(JSON.stringify(o));
+    Object.assign(n,{prev:keep.prev,obj:keep.obj,druhZar:keep.druhZar,predmet:keep.predmet,zatr:keep.zatr,spotrSucast:keep.spotrSucast,pIn:keep.pIn,mop:keep.mop,rozvod:keep.rozvod,rooms:keep.rooms,spot:keep.spot,druh:'per_op',dovod:'periodická lehota',
+      poslOS:o.druh!=='per_op'?o.od:o.poslOS,predch:`Predchádzajúca správa č. ${o.no} zo dňa ${dsk(o.od)}: `+(o.ned.filter(x=>!x.odstr).length?o.ned.filter(x=>!x.odstr).map((x,i)=>`${i+1}. ${x.popis} – `).join('\n')+'\n(doplniť: odstránené / pretrváva)':'neboli zistené nedostatky.')});
+    store.data.reports.push(n);cur=n.id;step=0;saveSoon();go('edit');toast('Vytvorená ďalšia revízia '+n.no);return}
+  if(d.del){const o=store.data.reports.find(x=>x.id===d.del);confirmDlg(`Zmazať správu ${o.no} (${o.prev.meno||'bez mena'})?`,()=>{store.data.reports=store.data.reports.filter(x=>x.id!==d.del);store.save();renderBook()});return}
+  if(b.id==='exp'){const j=JSON.stringify(store.data,null,1);const fn='ReviziePRO_zaloha_'+today()+'.json';(async()=>{try{const dl=await claude.use('downloads');if(dl){await dl.save({filename:fn,data:j});return}}catch(e){}try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([j],{type:'application/json'}));a.download=fn;a.click()}catch(e){}})();return}
+  if(d.go){go(d.go);return}
+  if(d.mdel!=null){store.data.settings.meradla.splice(+d.mdel,1);saveSoon();renderSet();return}
+  if(b.id==='madd'){store.data.settings.meradla.push({nazov:'',typ:'',vc:'',kl:'',kd:''});saveSoon();renderSet();return}
+  if(d.step!=null){step=+d.step;renderEdit();return}
+  if(b.id==='prev'){step=Math.max(0,step-1);renderEdit();scrollTo(0,0);return}
+  if(b.id==='next'){if(step<STEPS.length-1){step++;renderEdit();scrollTo(0,0)}else doPrint(r);return}
+  if(b.id==='uadd'){r.rozvod.useky.push({mat:'ocel',dn:'DN15',di:16,l:''});re();return}
+  if(d.udel!=null){r.rozvod.useky.splice(+d.udel,1);re();return}
+  if(b.id==='radd'){r.rooms.push({id:uid(),nazov:'',druh:'kuch',byt:'I',d:'',s:'',v:'',vol:'',priamo:true});re();return}
+  if(d.rdel!=null){r.rooms.splice(+d.rdel,1);re();return}
+  if(b.id==='sadd'){r.spot.push({druh:'kotol',typ:'',vc:'',rok:'',vykon:'',prikon:'',zhot:'C',t6:'a',room:r.rooms[0]?.id||'',odvod:'',prip:''});re();return}
+  if(d.sdel!=null){r.spot.splice(+d.sdel,1);re();return}
+  if(d.cl){const c=r.cl[d.cl]||(r.cl[d.cl]={});c.v=c.v===d.cv?'':d.cv;
+    if(c.v==='N')addNed(r,d.cl);
+    re();return}
+  if(b.id==='clfill'){clItems(r).forEach(c=>{const h=clHint(r,c);const o=r.cl[c[2]]||(r.cl[c[2]]={});if(!o.v)o.v=h&&h[0]?h[0]:'V';if(o.v==='N')addNed(r,c[2])});re();return}
+  if(b.id==='nadd'){r.ned.push({popis:'',rozpor:'',kat:'',vaz:'bez',opatrenie:'',termin:addDays(r.od,30),nahl:'',odstr:false});re();return}
+  if(d.ndel!=null){r.ned.splice(+d.ndel,1);re();return}
+  if(b.id==='print'){doPrint(r);return}
+  if(b.id==='preview'){const pv=$('#pv');pv.innerHTML='';const f=document.createElement('iframe');f.style.cssText='width:100%;height:80vh;border:1px solid var(--line);border-radius:8px;background:#fff';f.setAttribute('sandbox','');f.srcdoc=printHTML(r);pv.append(f);return}
+});
+document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.v==='edit'&&!rep()){toast('Najprv otvor alebo vytvor správu');return}go(b.dataset.v)});
+function addNed(r,id){if(r.ned.some(n=>n.cl===id))return;const it=CL.find(x=>x[2]===id);let popis=it[3]+' – ',rozpor=it[4];
+  if(it[6]==='room'){const bad=roomChecks(r).flatMap(x=>x.msgs.filter(m=>m.k===2).map(m=>x.rm.nazov+': '+m.t));if(bad.length)popis=bad.join(' ')}
+  if(it[6]==='psch'){const p=psch(r);if(p)popis=`Skúška prevádzkyschopnosti: Δp·V = ${fmt(p.x,0)} – únik ${p.t}`;rozpor='čl. 10.6.4 TPP 704 01'}
+  r.ned.push({cl:id,popis,rozpor,kat:id==='tes'?'N1':'',vaz:id==='tes'||(it[6]==='psch'&&psch(r)?.k===2)?'ohroz':'bez',opatrenie:'',termin:addDays(r.od,30),nahl:'',odstr:false})}
+function confirmDlg(t,fn){const d=$('#dlg');d.innerHTML=`<div class="dlg"><div class="card"><p style="margin-top:0">${esc(t)}</p><div class="row" style="justify-content:flex-end"><button class="btn" id="dno">Zrušiť</button><button class="btn pri" id="dyes">Zmazať</button></div></div></div>`;
+  $('#dno').onclick=()=>d.innerHTML='';$('#dyes').onclick=()=>{d.innerHTML='';fn()}}
+
+/* ================= BOOT ================= */
+(async()=>{
+  await store.load();render();
+  try{
+    if(window.claude&&claude.use){
+      const [db,user]=await Promise.all([claude.use('db'),claude.use('user')]);
+      if(db&&user){UID=await user.id();DB=db;
+        const snap=await db.collection('data/users/'+UID).doc('state').get();
+        const remote=snap&&(snap.data?snap.data():snap);
+        if(remote&&remote.json){const d=JSON.parse(remote.json);if(d&&d.reports&&(d.reports.length>=store.data.reports.length||!store.data.reports.length)){store.data=d;store.saveLocal()}else store.save()}
+        else store.save();
+        render()}
+    }
+  }catch(e){}
+})();
+}
+</script>
+</body>
+</html>
