@@ -156,6 +156,11 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 /* ── OVERLAY / MODAL ── */
 .ov-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(5px);}
 .ov-bg.open{display:flex;}
+#unsavedDlg{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;}
+#unsavedDlg .ud-box{background:var(--surf);border:1px solid var(--border);border-radius:14px;padding:18px 16px 14px;max-width:360px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.4);}
+#unsavedDlg .ud-t{font-weight:700;font-size:16px;margin-bottom:6px;}
+#unsavedDlg .ud-m{color:var(--muted);font-size:13px;margin-bottom:14px;line-height:1.4;}
+#unsavedDlg .btn{margin-top:6px;}
 .modal{background:var(--surf);border-radius:20px 20px 0 0;padding:18px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;border-top:1px solid var(--border);animation:slideUp .22s ease;}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .mdrag{width:38px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px;}
@@ -963,7 +968,7 @@ details.sk-fold>summary .sk-sum.bad{color:var(--danger)}
 
   <button class="btn btn-p" onclick="saveProtocol()">💾 Uložiť protokol</button>
   <button class="btn btn-g" style="margin-top:6px" onclick="saveProtocol(true)">🖨️ Uložiť a tlačiť (PDF)</button>
-  <button class="btn btn-s" style="margin-top:6px" onclick="closePM()">Zavrieť</button>
+  <button class="btn btn-s" style="margin-top:6px" data-guard-close onclick="closePM()">Zavrieť</button>
 </div>
 </div>
 
@@ -1113,8 +1118,9 @@ let custs = [];
 // Pri každom vydaní: zmeň APP_VERSION (dátum vydania; pri druhom vydaní v ten istý deň pridaj .2)
 // a na ZAČIATOK zoznamu CHANGELOG pridaj nový záznam. Používateľ uvidí novinky na Prehľade.
 // ═══════════════════════════════════════════════
-const APP_VERSION = '2026.11.23.2';
+const APP_VERSION = '2026.11.26';
 const CHANGELOG = [
+  { v:'2026.11.26', items:['Rozpísaný formulár (zákazník, servisný záznam, protokol, návšteva, nastavenia) sa už nestratí omylom: po ťuknutí na ✕, Zavrieť alebo Späť sa aplikácia opýta – Uložiť, Odísť bez uloženia alebo Pokračovať v úprave'] },
   { v:'2026.11.23.2', items:['Protokol elektrického kotla a tepelného čerpadla: nadpis meraní už nepíše „Analýza spalín“, ale „Elektrické merania“, resp. „Chladiaci okruh a merania“'] },
   { v:'2026.11.23.1', items:['Výrobné číslo, ktoré už je v databáze, aplikácia hneď oznámi — po naskenovaní aj pri písaní — a ukáže, u ktorého zákazníka je uložené','Pred uložením zákazníka s rovnakým výrobným číslom sa ešte opýta'] },
   { v:'2026.11.23', items:['Skener štítka: tlačidlo „Odfotiť štítok“ je vždy po ruke a funguje aj na iPhone — fotka sa prečíta, aj keď kamera naživo kód nezachytí','Keď sa kód na fotke nenájde, dá sa S/N napísať ručne a zákazník sa rovno vyhľadá'] },
@@ -4352,6 +4358,53 @@ document.addEventListener('keydown', e=>{
 });
 
 // ═══════════════════════════════════════════════
+// NEULOŽENÉ ZMENY – otázka Uložiť / Odísť bez uloženia / Pokračovať v úprave
+// ═══════════════════════════════════════════════
+function askUnsaved(title){
+  return new Promise(res=>{
+    const old=document.getElementById('unsavedDlg'); if(old) old.remove();
+    const d=document.createElement('div'); d.id='unsavedDlg';
+    d.innerHTML='<div class="ud-box" role="dialog" aria-modal="true"><div class="ud-t"></div>'
+      +'<div class="ud-m">Rozpísané údaje ešte nie sú uložené. Ak odídeš bez uloženia, stratia sa.</div>'
+      +'<button class="btn btn-p" data-a="save">💾 Uložiť</button>'
+      +'<button class="btn btn-d" data-a="discard">Odísť bez uloženia</button>'
+      +'<button class="btn btn-s" data-a="stay">Pokračovať v úprave</button></div>';
+    d.querySelector('.ud-t').textContent=title||'Neuložené zmeny';
+    const done=a=>{ window.skUnsavedAnswer=null; d.remove(); res(a); };
+    window.skUnsavedAnswer=done;
+    d.addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(b) return done(b.getAttribute('data-a')); if(e.target===d) done('stay'); });
+    document.body.appendChild(d);
+    const f=d.querySelector('[data-a="save"]'); if(f) try{ f.focus(); }catch(e){}
+  });
+}
+
+// Nastavenia: odchod na inú stránku s neuloženými údajmi firmy/technika
+(function(){
+  const IDS=['sName','sPhone','sFirma','sAddr','sInterval','sNavApp','sVatPayer','sEmail','sIco','sDic','sIcdph','sWeb','sOpr','sAnalyzer','sAnalyzerCal'];
+  const st=()=>IDS.map(id=>{ const e=document.getElementById(id); return !e?'':(e.type==='checkbox'?e.checked:e.value); }).join('\u0001');
+  const cur=()=>{ const p=document.querySelector('.pg.active'); return p ? p.id.replace('page-','') : ''; };
+  let snapS=null, asking=false;
+  const _pg=pg, _save=saveSettings;
+  pg=function(p){
+    if(cur()==='settings' && p!=='settings' && snapS!==null && st()!==snapS){
+      if(asking) return; asking=true;
+      askUnsaved('Nastavenia nie sú uložené').then(a=>{
+        asking=false;
+        if(a==='stay') return;
+        if(a==='save'){ saveSettings(); if(st()!==snapS) return; }
+        snapS=null; pg(p);
+      });
+      return;
+    }
+    const was=cur();
+    _pg(p);
+    if(p==='settings' && was!=='settings') snapS=st();
+    if(p!=='settings') snapS=null;
+  };
+  saveSettings=function(){ const r=_save.apply(this,arguments); snapS=st(); return r; };
+})();
+
+// ═══════════════════════════════════════════════
 // TLAČIDLO SPÄŤ (Android, prehliadač) A KLÁVES ESC
 // Späť zavrie to, čo je práve navrchu (podpis, skener, fotku, okno), z inej stránky vráti na Prehľad
 // a aplikáciu opustí až z Prehľadu. Rozpísaný formulár sa pred zavretím opýta.
@@ -4360,13 +4413,18 @@ document.addEventListener('keydown', e=>{
 (function(){
   const $=id=>document.getElementById(id);
   const ORDER=['welcomeModal','remindModal','aboutModal','driveHelpModal','devPickModal','mailModal','licModal','histModal','protoModal','custModal','detailModal'];
-  const FORMS=['custModal','histModal','protoModal'];
+  const FORMS=['custModal','histModal','protoModal','visitModal'];
+  const SAVE={
+    custModal:()=>saveCust(), histModal:()=>saveHistory(), protoModal:()=>saveProtocol(),
+    visitModal:()=>{ const b=document.querySelector('#visitModal [data-v="save"]'); if(b) b.click(); },
+  };
   const CLOSE={
     devPickModal:()=>closeDevPick(), histModal:()=>closeHM(), protoModal:()=>closePM(), custModal:()=>closeCM(), detailModal:()=>closeDM(),
     mailModal:()=>{ if(typeof closeMailModal==='function') closeMailModal(); else $('mailModal').classList.remove('open'); },
   };
   const isOpen=id=>{ const m=$(id); return !!m && m.classList.contains('open'); };
   function top(){
+    if($('unsavedDlg')) return 'unsavedDlg';
     if($('sigPad')) return 'sigPad';
     const sc=$('scannerOverlay'); if(sc && sc.style.display && sc.style.display!=='none') return 'scanner';
     if(isOpen('photoViewer')) return 'photoViewer';
@@ -4379,7 +4437,7 @@ document.addEventListener('keydown', e=>{
   const busy=()=>{ const b=$('pdfBusy'); return !!b && getComputedStyle(b).display!=='none'; };
 
   // stav formulára pri otvorení — podľa neho sa pozná, či je čo stratiť
-  const snap={}, watching={};
+  const snap={}, watching={}, touched={};
   function formState(id){
     const m=$(id); if(!m) return '';
     let s=[...m.querySelectorAll('input,select,textarea')].map(e=>e.type==='checkbox'?e.checked:(e.type==='file'?'':e.value)).join('\u0001');
@@ -4394,11 +4452,30 @@ document.addEventListener('keydown', e=>{
     if(t==='sigPad'){ const b=document.querySelector('#sigPad [data-a="x"]'); if(b) b.click(); else $('sigPad').remove(); return; }
     if(t==='scanner') return closeScanner();
     if(t==='photoViewer') return closePhotoViewer();
-    if(FORMS.includes(t) && snap[t]!==undefined && formState(t)!==snap[t]){
-      if(!confirm('Zavrieť bez uloženia?\n\nRozpísané údaje sa stratia.')) return;
+    if(t==='unsavedDlg') return window.skUnsavedAnswer && window.skUnsavedAnswer('stay');
+    guardedClose(t);
+  }
+  // ✕ / Zavrieť / Späť / Esc pri formulári: ak sú v ňom neuložené zmeny, opýta sa Uložiť / Odísť bez uloženia / Pokračovať
+  const isDirty=id=>!!touched[id] && snap[id]!==undefined && formState(id)!==snap[id];
+  async function guardedClose(t){
+    if(FORMS.includes(t) && isDirty(t)){
+      const a=await askUnsaved(t==='custModal' && !editId ? 'Nový zákazník nie je uložený' : null);
+      if(a==='stay') return;
+      if(a==='save'){ const f=SAVE[t]; if(f) try{ await f(); }catch(e){ console.error(e); } return; }  // po úspešnom uložení sa okno zavrie samo
     }
     (CLOSE[t]||(()=>$(t).classList.remove('open')))();
+    schedule();
   }
+  window.skGuardedClose=guardedClose;
+  document.addEventListener('click', e=>{
+    const b=e.target.closest && e.target.closest('.mclose,[data-guard-close],[data-v="close"]'); if(!b) return;
+    const m=b.closest('.ov-bg'); if(!m || !FORMS.includes(m.id) || !isDirty(m.id)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    guardedClose(m.id);
+  }, true);
+  // „dotknutý“ formulár = používateľ v ňom niečo písal alebo klikal (nie len otvorenie a doplnenie údajov aplikáciou)
+  const mark=e=>{ const m=e.target.closest && e.target.closest('.ov-bg'); if(m && FORMS.includes(m.id) && isOpen(m.id) && !(e.target.closest('.mclose,[data-guard-close],[data-v="close"]'))) touched[m.id]=1; };
+  ['input','change','click'].forEach(ev=>document.addEventListener(ev, mark, true));
 
   // Po obnovení stránky môže v histórii ostať náš záznam z minula. Krok späť z neho by stránku načítal znova,
   // preto ho len zmeníme na obyčajný záznam.
@@ -4408,7 +4485,7 @@ document.addEventListener('keydown', e=>{
     timer=null;
     FORMS.forEach(id=>{
       if(isOpen(id)){ if(!watching[id]){ watching[id]=1; setTimeout(()=>{ if(isOpen(id)) snap[id]=formState(id); }, 350); } }
-      else { delete watching[id]; delete snap[id]; }
+      else { delete watching[id]; delete snap[id]; delete touched[id]; }
     });
     const want=!!top() || page()!=='dashboard';
     if(want && !armed){ try{ history.pushState({sk:1},''); armed=true; }catch(e){} }
